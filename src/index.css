@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply text-ink antialiased;
+    background-color: #fafafa;
+    background-image:
+      radial-gradient(60rem 60rem at 100% -10%, rgba(109, 74, 255, 0.07), transparent 60%),
+      radial-gradient(50rem 50rem at -10% 110%, rgba(236, 72, 153, 0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-3xl border border-paper-border bg-white/80 shadow-chill backdrop-blur-sm;
+  }
+
+  .brand-text {
+    @apply bg-brand-gradient bg-clip-text text-transparent;
+  }
+
+  .logo-mark {
+    @apply flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-gradient text-sm font-bold text-white shadow-glow;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-paper-border bg-paper-warm px-4 py-3 text-ink placeholder-ink-faint outline-none transition focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/20;
+  }
+
+  .btn-primary {
+    @apply rounded-full bg-brand-gradient px-6 py-3 font-medium text-white shadow-glow transition hover:brightness-110 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100;
+  }
+
+  .btn-secondary {
+    @apply rounded-full border border-paper-border bg-white px-6 py-3 font-medium text-ink transition hover:border-ink hover:bg-paper-warm;
+  }
+
+  .chip {
+    @apply rounded-full border border-paper-border bg-white px-4 py-1.5 text-sm font-medium text-ink-muted transition hover:border-ink hover:text-ink;
+  }
+
+  .chip-active {
+    @apply border-transparent bg-brand-gradient text-white shadow-glow hover:text-white;
+  }
+
+  .scroll-box {
+    @apply max-h-72 overflow-y-auto rounded-2xl border border-paper-border bg-paper-warm p-2;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(10, 10, 10, 0.2) transparent;
+  }
+
+  .scroll-box::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scroll-box::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink/20;
+  }
+
+  .scroll-box::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
