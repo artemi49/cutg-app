@@ -159,7 +159,7 @@ export const HAIRCUT_GROUPS: {
     ],
   },
   {
-    group: "Fades & Klassisch",
+    group: "Fades & Classic",
     cuts: [
       { name: "Low Skin Fade", details: "clean low skin fade down to bare skin near the neckline, neat styled top" },
       { name: "Mid Drop Fade", details: "mid fade that drops lower behind the ear following the head shape" },
@@ -190,10 +190,10 @@ export const HAIRCUT_GROUPS: {
 
 /** Moderne Bart-Styles für Lumina */
 export const BEARD_STYLES: { name: string; details: string }[] = [
-  { name: "Glatt rasiert", details: "completely clean shaven smooth face, no beard and no stubble at all" },
-  { name: "3-Tage-Bart", details: "short even stubble across the jaw and cheeks, neat groomed three-day shadow" },
-  { name: "Kurzer Vollbart", details: "short full beard evenly trimmed, sharply lined along the cheeks and neckline" },
-  { name: "Vollbart", details: "thick full beard with good length, neatly groomed and shaped, defined edges" },
+  { name: "Clean Shaven", details: "completely clean shaven smooth face, no beard and no stubble at all" },
+  { name: "Stubble", details: "short even stubble across the jaw and cheeks, neat groomed three-day shadow" },
+  { name: "Short Beard", details: "short full beard evenly trimmed, sharply lined along the cheeks and neckline" },
+  { name: "Full Beard", details: "thick full beard with good length, neatly groomed and shaped, defined edges" },
   { name: "Garibaldi", details: "long rounded full beard with a natural fuller bottom and a thick mustache" },
   { name: "Ducktail", details: "full beard tapered to a pointed ducktail shape at the chin, tidy cheeks" },
   { name: "Van Dyke", details: "disconnected pointed goatee with a styled mustache, cheeks fully shaved" },
@@ -204,7 +204,7 @@ export const BEARD_STYLES: { name: string; details: string }[] = [
   { name: "Beardstache", details: "prominent thick mustache with very short stubble on the rest of the beard area" },
   { name: "Faded Beard", details: "full beard faded smoothly into the sideburns with a sharp clean cheek line" },
   // Schnauzer / Moustache-Styles
-  { name: "Schnauzer", details: "thick chevron mustache fully covering the top lip, cheeks and chin clean shaven" },
+  { name: "Chevron", details: "thick chevron mustache fully covering the top lip, cheeks and chin clean shaven" },
   { name: "Handlebar", details: "long mustache with the ends twisted and curled upward into rounded loops, cheeks shaved" },
   { name: "Imperial", details: "large bushy mustache with both ends curled and twisted upward, no chin beard" },
   { name: "Dalí", details: "thin mustache with very long pointed ends twisted and pointing straight upward, dramatic" },

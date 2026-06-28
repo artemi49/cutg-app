@@ -30,10 +30,10 @@ const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
 
 export default function App() {
-  const [language, setLanguage] = useState<Language>("de");
+  const [language, setLanguage] = useState<Language>("en");
   const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
   const [afterUrl, setAfterUrl] = useState<string | null>(null);
-  const [texts, setTexts] = useState(DEFAULT_TEXTS.de);
+  const [texts, setTexts] = useState(DEFAULT_TEXTS.en);
   const [accentColor, setAccentColor] = useState("#0a0a0a");
   const [brandName, setBrandName] = useState("CutG");
   const [showBranding, setShowBranding] = useState(true);
@@ -53,7 +53,8 @@ export default function App() {
     null
   );
 
-  const ui = UI_LABELS[language];
+  // App-Oberfläche immer Englisch; das Sprach-Dropdown steuert nur die Template-Labels
+  const ui = UI_LABELS.en;
   const bothReady = ready.before && ready.after;
 
   const blueprintConfig: BlueprintConfig = useMemo(
@@ -110,7 +111,7 @@ export default function App() {
       imgRef.current = img;
       setReady((r) => ({ ...r, [slot]: true }));
     } catch {
-      setError("Bild konnte nicht geladen werden");
+      setError("Image could not be loaded");
     }
   };
 
@@ -207,18 +208,16 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-paper-border bg-white/70 backdrop-blur-md">
+      <header className="border-b border-paper-border bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-6">
           <div className="flex items-center gap-3">
             <div className="logo-mark">✂</div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">
-                <span className="brand-text">CutG</span>
-              </h1>
-              <p className="mt-0.5 text-sm text-ink-muted">vorher · nachher · tiktok</p>
+              <h1 className="brand-text text-xl">CutG</h1>
+              <p className="mt-0.5 text-sm text-ink-muted">before · after · tiktok</p>
             </div>
           </div>
-          <span className="rounded-full border border-paper-border bg-white/60 px-4 py-1.5 text-xs font-medium tracking-widest text-ink-muted">
+          <span className="rounded-full border border-paper-border bg-white px-4 py-1.5 text-xs font-medium tracking-widest text-ink-muted">
             {CANVAS_WIDTH} × {CANVAS_HEIGHT}
           </span>
         </div>
@@ -232,16 +231,16 @@ export default function App() {
             </h2>
             <p className="mt-2 text-sm text-ink-muted">{ui.formatHint}</p>
             <p className="mt-2 text-xs text-ink-faint">
-              💡 Tipp: Nachher-Bild z. B. in{" "}
+              💡 Tip: generate the after image in{" "}
               <a
                 href="https://ai.byteplus.com/lumina/en/model/image"
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-brand underline-offset-2 hover:underline"
+                className="font-medium text-ink underline underline-offset-2"
               >
                 Lumina (GPT Image 2)
               </a>{" "}
-              erzeugen und hier hochladen.
+              and upload it here.
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -260,7 +259,7 @@ export default function App() {
                         <div className="flex h-12 w-12 items-center justify-center rounded-full border border-paper-border bg-white">
                           <span className="text-lg text-ink-muted">+</span>
                         </div>
-                        <span className="mt-4 text-sm font-medium text-ink">Bild hochladen</span>
+                        <span className="mt-4 text-sm font-medium text-ink">Upload image</span>
                         <span className="mt-1 text-xs text-ink-faint">{ui.uploadHint}</span>
                       </>
                     )}
@@ -277,7 +276,7 @@ export default function App() {
                       className="mt-3 text-xs text-ink-faint underline-offset-2 hover:text-ink hover:underline"
                       onClick={() => handleFileChange(slot, null)}
                     >
-                      entfernen
+                      remove
                     </button>
                   )}
                 </div>
@@ -289,20 +288,20 @@ export default function App() {
             <div className="mb-1 flex items-center gap-2">
               <span className="text-base">✂️</span>
               <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-                Trend-Frisuren · Prompt kopieren
+                Hairstyles · copy prompt
               </h2>
             </div>
             <p className="mt-2 text-sm text-ink-muted">
-              Frisur antippen → JSON-Prompt landet in der Zwischenablage. In{" "}
+              Tap a style → the JSON prompt is copied to your clipboard. Paste it in{" "}
               <a
                 href="https://ai.byteplus.com/lumina/en/model/image"
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-brand underline-offset-2 hover:underline"
+                className="font-medium text-ink underline underline-offset-2"
               >
                 Lumina
               </a>{" "}
-              mit dem Vorher-Foto einfügen — nur die Haare werden verändert.
+              with the before photo — only the hair changes.
             </p>
 
             <div className="mt-4 max-h-80 space-y-4 overflow-y-auto pr-1">
@@ -322,7 +321,7 @@ export default function App() {
                         }
                         className={`chip ${copiedCut === cut.name ? "chip-active" : ""}`}
                       >
-                        {copiedCut === cut.name ? "✓ Kopiert" : cut.name}
+                        {copiedCut === cut.name ? "✓ Copied" : cut.name}
                       </button>
                     ))}
                   </div>
@@ -335,12 +334,12 @@ export default function App() {
             <div className="mb-1 flex items-center gap-2">
               <span className="text-base">🧔</span>
               <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-                Bart & Schnauzer · Prompt kopieren
+                Beards & moustaches · copy prompt
               </h2>
             </div>
             <p className="mt-2 text-sm text-ink-muted">
-              Bart antippen → JSON-Prompt in die Zwischenablage. In Lumina mit dem
-              Foto einfügen — nur der Bart wird verändert.
+              Tap a style → the JSON prompt is copied. Paste it in Lumina with the
+              photo — only the beard changes.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -354,7 +353,7 @@ export default function App() {
                     onClick={() => copyPrompt(buildBeardPrompt(b.name, b.details), key)}
                     className={`chip ${copiedCut === key ? "chip-active" : ""}`}
                   >
-                    {copiedCut === key ? "✓ Kopiert" : b.name}
+                    {copiedCut === key ? "✓ Copied" : b.name}
                   </button>
                 );
               })}
@@ -458,7 +457,7 @@ export default function App() {
         <section className="panel sticky top-6 p-6">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-              vorschau
+              preview
             </h2>
             {bothReady && (
               <button type="button" className="btn-secondary text-xs" onClick={handleDownload}>
@@ -481,9 +480,9 @@ export default function App() {
               </div>
             ) : (
               <div className="flex min-h-[480px] flex-col items-center justify-center px-10 text-center">
-                <p className="text-sm font-medium text-ink-muted">dein template erscheint hier</p>
+                <p className="text-sm font-medium text-ink-muted">your template appears here</p>
                 <p className="mt-2 text-xs text-ink-faint">
-                  beide bilder hochladen · dann verschieben & zoomen
+                  upload both images · then drag & zoom
                 </p>
               </div>
             )}
@@ -492,7 +491,7 @@ export default function App() {
           {bothReady && (
             <div className="mt-4 space-y-4">
               <p className="text-center text-xs text-ink-faint">
-                ↕ Bild ziehen zum Verschieben · Slider zum Zoomen
+                ↕ drag the image to reposition · slider to zoom
               </p>
               {(["before", "after"] as const).map((slot) => (
                 <div key={slot} className="rounded-xl border border-paper-border bg-paper-warm p-3">
@@ -505,7 +504,7 @@ export default function App() {
                       className="text-xs text-ink-faint underline-offset-2 hover:text-ink hover:underline"
                       onClick={() => resetTransform(slot)}
                     >
-                      zentrieren
+                      center
                     </button>
                   </div>
                   <div className="flex items-center gap-3">
@@ -519,7 +518,7 @@ export default function App() {
                       onChange={(e) =>
                         patchTransform(slot, { scale: Number(e.target.value) })
                       }
-                      className="h-1 flex-1 cursor-pointer accent-brand"
+                      className="h-1 flex-1 cursor-pointer accent-ink"
                     />
                   </div>
                 </div>
@@ -529,18 +528,16 @@ export default function App() {
         </section>
       </main>
 
-      <footer className="mt-auto border-t border-paper-border bg-white/60 backdrop-blur-md">
+      <footer className="mt-auto border-t border-paper-border bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-brand-gradient text-xs font-bold text-white shadow-glow">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink text-xs font-bold text-white">
               ✂
             </div>
-            <span className="text-sm font-semibold">
-              <span className="brand-text">CutG</span>
-            </span>
+            <span className="brand-text text-sm">CutG</span>
           </div>
           <p className="text-xs text-ink-faint">
-            © {new Date().getFullYear()} CutG · alles läuft lokal im browser
+            © {new Date().getFullYear()} CutG · runs entirely in your browser
           </p>
         </div>
       </footer>

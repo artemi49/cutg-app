@@ -4,34 +4,29 @@
 
 @layer base {
   body {
-    @apply text-ink antialiased;
-    background-color: #fafafa;
-    background-image:
-      radial-gradient(60rem 60rem at 100% -10%, rgba(109, 74, 255, 0.07), transparent 60%),
-      radial-gradient(50rem 50rem at -10% 110%, rgba(236, 72, 153, 0.06), transparent 60%);
-    background-attachment: fixed;
+    @apply bg-paper text-ink antialiased;
   }
 }
 
 @layer components {
   .panel {
-    @apply rounded-3xl border border-paper-border bg-white/80 shadow-chill backdrop-blur-sm;
+    @apply rounded-2xl border border-paper-border bg-white shadow-chill;
   }
 
   .brand-text {
-    @apply bg-brand-gradient bg-clip-text text-transparent;
+    @apply font-bold tracking-tight text-ink;
   }
 
   .logo-mark {
-    @apply flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-gradient text-sm font-bold text-white shadow-glow;
+    @apply flex h-10 w-10 items-center justify-center rounded-xl bg-ink text-sm font-bold text-white;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-paper-border bg-paper-warm px-4 py-3 text-ink placeholder-ink-faint outline-none transition focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/20;
+    @apply w-full rounded-xl border border-paper-border bg-paper-warm px-4 py-3 text-ink placeholder-ink-faint outline-none transition focus:border-ink focus:bg-white;
   }
 
   .btn-primary {
-    @apply rounded-full bg-brand-gradient px-6 py-3 font-medium text-white shadow-glow transition hover:brightness-110 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:brightness-100;
+    @apply rounded-full bg-ink px-6 py-3 font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40;
   }
 
   .btn-secondary {
@@ -43,7 +38,7 @@
   }
 
   .chip-active {
-    @apply border-transparent bg-brand-gradient text-white shadow-glow hover:text-white;
+    @apply border-ink bg-ink text-white hover:text-white;
   }
 
   .scroll-box {
