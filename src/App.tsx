@@ -229,7 +229,9 @@ export default function App() {
             <h2 className="mb-1 text-xs font-medium uppercase tracking-widest text-ink-faint">
               {ui.uploadTitle}
             </h2>
-            <p className="mt-2 text-sm text-ink-muted">{ui.formatHint}</p>
+            <p className="mt-2 text-sm text-ink-muted">
+              Output: {CANVAS_WIDTH} × {CANVAS_HEIGHT} px · 3:4 format
+            </p>
             <p className="mt-2 text-xs text-ink-faint">
               💡 Tip: generate the after image in{" "}
               <a

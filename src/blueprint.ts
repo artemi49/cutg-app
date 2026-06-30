@@ -2,9 +2,9 @@ import type { BlueprintConfig } from "./types";
 
 const FONT = '"DM Sans", system-ui, sans-serif';
 
-/** TikTok-nah: 9:16, etwas kompakter als 1920px */
+/** 3:4 Hochformat */
 export const CANVAS_WIDTH = 1080;
-export const CANVAS_HEIGHT = 1680;
+export const CANVAS_HEIGHT = 1440;
 /** Supersampling: intern in 2× rendern → scharfe Kanten & Text, kein Verpixeln */
 const SCALE = 2;
 const DIVIDER_HEIGHT = 10;
