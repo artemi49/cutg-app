@@ -453,3 +453,65 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
   link.download = filename;
   link.click();
 }
+
+async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
+  const blob = await (await fetch(dataUrl)).blob();
+  return new File([blob], filename, { type: blob.type || "image/png" });
+}
+
+interface Shareable {
+  dataUrl: string;
+  filename: string;
+}
+
+/**
+ * Speichert ein Bild: auf Mobilgeräten über die Web-Share-API (Teilen-Menü →
+ * „In Fotos/Galerie sichern"); sonst normaler Download.
+ */
+export async function saveImage(dataUrl: string, filename: string): Promise<void> {
+  const nav = navigator as Navigator & {
+    canShare?: (data: { files: File[] }) => boolean;
+    share?: (data: { files: File[] }) => Promise<void>;
+  };
+  try {
+    const file = await dataUrlToFile(dataUrl, filename);
+    if (nav.canShare && nav.share && nav.canShare({ files: [file] })) {
+      try {
+        await nav.share({ files: [file] });
+        return;
+      } catch (err) {
+        // Nutzer hat das Teilen-Menü abgebrochen → nichts weiter tun
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // andere Fehler → Fallback unten
+      }
+    }
+  } catch {
+    /* Fallback unten */
+  }
+  downloadDataUrl(dataUrl, filename);
+}
+
+/** Speichert mehrere Bilder auf einmal (ein Teilen-Menü) bzw. lädt sie einzeln. */
+export async function saveImages(items: Shareable[]): Promise<void> {
+  if (!items.length) return;
+  const nav = navigator as Navigator & {
+    canShare?: (data: { files: File[] }) => boolean;
+    share?: (data: { files: File[] }) => Promise<void>;
+  };
+  try {
+    const files = await Promise.all(
+      items.map((it) => dataUrlToFile(it.dataUrl, it.filename))
+    );
+    if (nav.canShare && nav.share && nav.canShare({ files })) {
+      try {
+        await nav.share({ files });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+      }
+    }
+  } catch {
+    /* Fallback unten */
+  }
+  items.forEach((it) => downloadDataUrl(it.dataUrl, it.filename));
+}
