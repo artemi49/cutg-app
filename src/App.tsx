@@ -54,6 +54,20 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Verkleinert das Bild auf max. maxDim px (JPEG) fürs Hochladen zur API. */
+function imageToApiDataUrl(img: HTMLImageElement, maxDim = 1024): string {
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return img.src;
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", 0.9);
+}
+
 async function requestAfter(
   imageDataUrl: string,
   prompt: string,
@@ -179,7 +193,7 @@ function MainApp() {
         const item = t1[i];
         const style = ALL_STYLES.find((s) => s.name === item.style)!;
         const afterUrl = await requestAfter(
-          item.src,
+          imageToApiDataUrl(item.img),
           gptPrompt(style.name, style.details),
           controller.signal
         );
@@ -239,7 +253,7 @@ function MainApp() {
         setJobs((prev) => prev.map((j, k) => (k === i ? { ...j, status: "active" } : j)));
         const style = ALL_STYLES.find((s) => s.name === t2Styles[i])!;
         const afterUrl = await requestAfter(
-          t2.src,
+          imageToApiDataUrl(t2.img),
           gptPrompt(style.name, style.details),
           controller.signal
         );

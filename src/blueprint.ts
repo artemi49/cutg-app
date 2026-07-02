@@ -377,10 +377,21 @@ function drawLiquidGlassBranding(
   });
 }
 
-/** Stellt sicher, dass die Schriften geladen sind (einmalig, danach instant) */
+/**
+ * Stellt sicher, dass die Schrift geladen ist (einmalig, danach instant).
+ * Nur die einzelne Familie an document.fonts.load übergeben – iOS Safari wirft
+ * sonst "The string did not match the expected pattern." bei der Familienliste.
+ * Fehler werden geschluckt, damit die Generierung nie daran scheitert.
+ */
 export async function ensureFonts(): Promise<void> {
-  await document.fonts.load(`500 ${LABEL.fontSize}px ${FONT}`);
-  await document.fonts.load(`500 26px ${FONT}`);
+  try {
+    await Promise.all([
+      document.fonts.load(`500 ${LABEL.fontSize}px "DM Sans"`),
+      document.fonts.load(`500 26px "DM Sans"`),
+    ]);
+  } catch {
+    /* Schrift optional – im Zweifel rendert der Canvas mit Fallback-Font */
+  }
 }
 
 const DEFAULT_TRANSFORMS: BlueprintTransforms = {
