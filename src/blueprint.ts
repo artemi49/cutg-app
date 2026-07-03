@@ -100,9 +100,11 @@ function clamp(v: number, min: number, max: number) {
 }
 
 /**
- * Weichzeichner OHNE ctx.filter (iOS Safari unterstützt Canvas-filter nicht):
- * Bild in eine winzige Fläche herunterrechnen und wieder groß hochskalieren –
- * das Hochskalieren mit Glättung ergibt den Blur.
+ * Weichzeichner OHNE ctx.filter (iOS Safari unterstützt Canvas-filter nicht).
+ * Ein einzelner Riesensprung beim Hochskalieren erzeugt auf iOS blockige
+ * Artefakte (nur bilineare Glättung). Deshalb: schrittweise per Halbieren
+ * herunterskalieren und per Verdoppeln wieder hoch – jede Stufe glättet,
+ * zusammen ergibt das einen weichen, gaußartigen Blur in jedem Browser.
  */
 function drawBlurredCover(
   ctx: CanvasRenderingContext2D,
@@ -112,20 +114,48 @@ function drawBlurredCover(
   pw: number,
   ph: number
 ) {
-  const sw = 36;
-  const sh = Math.max(1, Math.round((sw * ph) / pw));
-  const small = document.createElement("canvas");
-  small.width = sw;
-  small.height = sh;
-  const sctx = small.getContext("2d");
-  if (!sctx) return;
-  sctx.imageSmoothingEnabled = true;
-  sctx.imageSmoothingQuality = "high";
-  coverImage(sctx, img, 0, 0, sw, sh);
+  // Arbeitsfläche in Panel-Proportion, moderat aufgelöst
+  const baseW = 512;
+  const baseH = Math.max(1, Math.round((baseW * ph) / pw));
+  let cur = document.createElement("canvas");
+  cur.width = baseW;
+  cur.height = baseH;
+  let cctx = cur.getContext("2d");
+  if (!cctx) return;
+  cctx.imageSmoothingEnabled = true;
+  cctx.imageSmoothingQuality = "high";
+  coverImage(cctx, img, 0, 0, baseW, baseH);
+
+  const step = (w: number, h: number): HTMLCanvasElement | null => {
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    const x = c.getContext("2d");
+    if (!x) return null;
+    x.imageSmoothingEnabled = true;
+    x.imageSmoothingQuality = "high";
+    x.drawImage(cur, 0, 0, c.width, c.height);
+    return c;
+  };
+
+  // Runter: 512 → 256 → 128 → 64 → 32 → 16 (jede Stufe halbiert & glättet)
+  for (let w = baseW / 2; w >= 16; w /= 2) {
+    const next = step(w, (w * baseH) / baseW);
+    if (!next) return;
+    cur = next;
+    cctx = cur.getContext("2d");
+  }
+
+  // Hoch: schrittweise verdoppeln bis ~Panelbreite (statt einem Riesensprung)
+  for (let w = cur.width * 2; w < pw; w *= 2) {
+    const next = step(w, (w * baseH) / baseW);
+    if (!next) return;
+    cur = next;
+  }
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(small, px, py, pw, ph);
+  ctx.drawImage(cur, px, py, pw, ph);
 }
 
 /**
