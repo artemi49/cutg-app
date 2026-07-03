@@ -35,8 +35,6 @@ export const DEFAULT_TRANSFORM: ImageTransform = {
 /** Zoom-Grenzen: <1 = rauszoomen (Blur-Rand), >1 = reinzoomen */
 export const MIN_SCALE = 0.4;
 export const MAX_SCALE = 3;
-/** Blur-Stärke des Hintergrunds beim Rauszoomen (logische px) */
-const BG_BLUR = 30;
 
 const clampScale = (s: number) => Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
 
@@ -102,6 +100,35 @@ function clamp(v: number, min: number, max: number) {
 }
 
 /**
+ * Weichzeichner OHNE ctx.filter (iOS Safari unterstützt Canvas-filter nicht):
+ * Bild in eine winzige Fläche herunterrechnen und wieder groß hochskalieren –
+ * das Hochskalieren mit Glättung ergibt den Blur.
+ */
+function drawBlurredCover(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  px: number,
+  py: number,
+  pw: number,
+  ph: number
+) {
+  const sw = 36;
+  const sh = Math.max(1, Math.round((sw * ph) / pw));
+  const small = document.createElement("canvas");
+  small.width = sw;
+  small.height = sh;
+  const sctx = small.getContext("2d");
+  if (!sctx) return;
+  sctx.imageSmoothingEnabled = true;
+  sctx.imageSmoothingQuality = "high";
+  coverImage(sctx, img, 0, 0, sw, sh);
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(small, px, py, pw, ph);
+}
+
+/**
  * Zeichnet ein Bild in ein Panel: bei Zoom <1 entsteht ein Rand, der mit einer
  * unscharfen (geblurrten) Cover-Version desselben Bildes gefüllt wird.
  */
@@ -123,10 +150,7 @@ function drawPanel(
 
   // Blur-Hintergrund nur nötig, wenn das Bild das Panel nicht mehr füllt
   if (f < 1) {
-    ctx.filter = `blur(${BG_BLUR}px)`;
-    const o = BG_BLUR * 2; // Overscan, damit die Blur-Kanten außerhalb des Clips liegen
-    coverImage(ctx, img, px - o, py - o, pw + o * 2, ph + o * 2);
-    ctx.filter = "none";
+    drawBlurredCover(ctx, img, px, py, pw, ph);
     // leichte Abdunklung für besseren Kontrast zum Vordergrund
     ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
     ctx.fillRect(px, py, pw, ph);
