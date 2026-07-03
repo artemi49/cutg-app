@@ -14,4 +14,6 @@ export interface BlueprintConfig {
   accentColor: string;
   showBranding: boolean;
   brandName: string;
+  /** Optional: Pillen-Farben der beiden Panel-Labels (Default rot/grün) */
+  labelColors?: { top: string; bottom: string };
 }

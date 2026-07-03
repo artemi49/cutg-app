@@ -160,6 +160,10 @@ function MainApp() {
   const idRef = useRef(0);
   const t1EditorRefs = useRef<(EditorHandle | null)[]>([]);
   const t3EditorRefs = useRef<(EditorHandle | null)[]>([]);
+  // T3: sammelt Front/Back pro Frisur, bis beide Ansichten fertig sind
+  const t3Pairs = useRef<
+    Map<number, { name: string; front?: HTMLImageElement; back?: HTMLImageElement }>
+  >(new Map());
 
   useEffect(() => {
     ensureFonts();
@@ -211,6 +215,7 @@ function MainApp() {
     loadedIdx.current = new Set();
     t1EditorRefs.current = [];
     t3EditorRefs.current = [];
+    t3Pairs.current = new Map();
     if (id) sbRpc("mkt_delete_job", { p_job: id }).catch(() => {});
   };
 
@@ -226,6 +231,7 @@ function MainApp() {
     setT3Results([]);
     t1EditorRefs.current = [];
     t3EditorRefs.current = [];
+    t3Pairs.current = new Map();
     loadedIdx.current = new Set();
     setJobStatus({
       id: "",
@@ -302,13 +308,27 @@ function MainApp() {
               beforeAfter: prev?.beforeAfter ?? null,
               afters: [...(prev?.afters ?? []), { name: it.style, dataUrl: r.result }],
             }));
+          } else if (activeJob.mode === "t3") {
+            // Front (gerader idx) + Back (ungerader idx) → EIN Doppel-Template
+            const generated = await loadImage(r.result);
+            const pairIdx = Math.floor(it.idx / 2);
+            const baseName = it.style.replace(/ · (Front|Back)$/, "");
+            const entry = t3Pairs.current.get(pairIdx) ?? { name: baseName };
+            if (it.idx % 2 === 0) entry.front = generated;
+            else entry.back = generated;
+            t3Pairs.current.set(pairIdx, entry);
+            if (entry.front && entry.back) {
+              const { front, back } = entry;
+              setT3Results((prev) => [
+                ...prev,
+                { name: entry.name, before: front, after: back },
+              ]);
+            }
           } else {
             const before = await loadImage(r.image);
             const after = await loadImage(r.result);
             if (activeJob.mode === "t1") {
               setT1Results((prev) => [...prev, { name: it.style, before, after }]);
-            } else if (activeJob.mode === "t3") {
-              setT3Results((prev) => [...prev, { name: it.style, before, after }]);
             } else {
               setT2Result((prev) => ({
                 beforeAfter: { name: it.style, before, after },
@@ -843,8 +863,8 @@ function MainApp() {
                 2 · Pick hairstyles ({t3Styles.length} selected)
               </h2>
               <p className="mt-2 text-sm text-ink-muted">
-                Each style → a <strong>front</strong> and a <strong>back</strong> view, both
-                as editable before/after templates.
+                Each style → <strong>one</strong> template: front view on top, back view
+                below (two generations per style).
               </p>
               <div className="mt-4 max-h-72 space-y-4 overflow-y-auto pr-1">
                 {HAIRCUT_GROUPS.map((group) => (
@@ -894,9 +914,9 @@ function MainApp() {
                 disabled={!t3Ready}
                 onClick={runT3}
               >
-                {`Generate (${t3Styles.length * 2 || 0} image${
-                  t3Styles.length * 2 === 1 ? "" : "s"
-                } · front & back)`}
+                {`Generate ${t3Styles.length || 0} front/back template${
+                  t3Styles.length === 1 ? "" : "s"
+                }`}
               </button>
             )}
 
@@ -934,6 +954,7 @@ function MainApp() {
                       name={r.name}
                       prefix="t3"
                       index={i}
+                      labels={{ top: "FRONT", bottom: "BACK" }}
                     />
                   ))}
                 </div>
@@ -973,8 +994,10 @@ const TemplateEditor = forwardRef<
     name: string;
     prefix: string;
     index: number;
+    /** Optional: eigene Panel-Labels (z. B. FRONT/BACK) statt Before/After */
+    labels?: { top: string; bottom: string };
   }
->(function TemplateEditor({ before, after, config, name, prefix, index }, ref) {
+>(function TemplateEditor({ before, after, config, name, prefix, index, labels }, ref) {
   const [transforms, setTransforms] = useState<{
     before: ImageTransform;
     after: ImageTransform;
@@ -982,11 +1005,24 @@ const TemplateEditor = forwardRef<
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dragRef = useRef<{ slot: Slot; lastX: number; lastY: number } | null>(null);
 
+  const effectiveConfig: BlueprintConfig = useMemo(
+    () =>
+      labels
+        ? {
+            ...config,
+            texts: { ...config.texts, beforeLabel: labels.top, afterLabel: labels.bottom },
+            // neutral schwarz statt rot/grün – FRONT/BACK ist kein Vorher/Nachher
+            labelColors: { top: "#0a0a0a", bottom: "#0a0a0a" },
+          }
+        : config,
+    [config, labels]
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    drawBlueprint(canvas, before, after, config, transforms);
-  }, [before, after, config, transforms]);
+    drawBlueprint(canvas, before, after, effectiveConfig, transforms);
+  }, [before, after, effectiveConfig, transforms]);
 
   const filename = `cutg-${prefix}-${safeName(name)}-${index + 1}.png`;
   const getResult = () => {
@@ -1086,7 +1122,7 @@ const TemplateEditor = forwardRef<
           <div key={slot}>
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                {slot} · zoom
+                {labels ? (slot === "before" ? labels.top : labels.bottom) : slot} · zoom
               </span>
               <button
                 type="button"

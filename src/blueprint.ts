@@ -496,7 +496,14 @@ export function drawBlueprint(
     transforms.after
   );
 
-  drawLiquidGlassLabel(ctx, canvas, config.texts.beforeLabel, margin, margin, "#dc2626");
+  drawLiquidGlassLabel(
+    ctx,
+    canvas,
+    config.texts.beforeLabel,
+    margin,
+    margin,
+    config.labelColors?.top ?? "#dc2626"
+  );
 
   drawLiquidGlassLabel(
     ctx,
@@ -504,7 +511,7 @@ export function drawBlueprint(
     config.texts.afterLabel,
     margin,
     PANEL_HEIGHT + DIVIDER_HEIGHT + margin,
-    "#16a34a"
+    config.labelColors?.bottom ?? "#16a34a"
   );
 
   if (config.showBranding) {
