@@ -25,7 +25,7 @@ import { DEFAULT_TEXTS, HAIRCUT_GROUPS } from "./constants";
 import type { BlueprintConfig, Language } from "./types";
 import LegacyStudio from "./LegacyStudio";
 
-type Mode = "t1" | "t2";
+type Mode = "t1" | "t2" | "t3";
 type Slot = "before" | "after";
 type JobStatus = "pending" | "active" | "done" | "error";
 interface Job {
@@ -43,6 +43,10 @@ const clamp = (v: number, min: number, max: number) =>
 
 function gptPrompt(name: string, details: string): string {
   return `Give this person a ${name} haircut. ${details}. Change only the hair — keep the exact same face, identity, skin tone, expression and background. Photorealistic, natural salon result.`;
+}
+
+function gptBackPrompt(name: string, details: string): string {
+  return `Show this exact same person from directly behind, so we see the back of their head and the back of a fresh ${name} haircut. ${details}. Keep the same person, hair color, skin tone, clothing and background — only the viewpoint changes to a back view. Photorealistic barbershop result photo.`;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -149,8 +153,13 @@ function MainApp() {
     afters: AfterResult[];
   } | null>(null);
 
+  const [t3, setT3] = useState<{ src: string; img: HTMLImageElement } | null>(null);
+  const [t3Styles, setT3Styles] = useState<string[]>([]);
+  const [t3Results, setT3Results] = useState<TemplateResult[]>([]);
+
   const idRef = useRef(0);
   const t1EditorRefs = useRef<(EditorHandle | null)[]>([]);
+  const t3EditorRefs = useRef<(EditorHandle | null)[]>([]);
 
   useEffect(() => {
     ensureFonts();
@@ -198,8 +207,10 @@ function MainApp() {
     setJobStatus(null);
     setT1Results([]);
     setT2Result(null);
+    setT3Results([]);
     loadedIdx.current = new Set();
     t1EditorRefs.current = [];
+    t3EditorRefs.current = [];
     if (id) sbRpc("mkt_delete_job", { p_job: id }).catch(() => {});
   };
 
@@ -212,7 +223,9 @@ function MainApp() {
     setError(null);
     setT1Results([]);
     setT2Result(null);
+    setT3Results([]);
     t1EditorRefs.current = [];
+    t3EditorRefs.current = [];
     loadedIdx.current = new Set();
     setJobStatus({
       id: "",
@@ -294,6 +307,8 @@ function MainApp() {
             const after = await loadImage(r.result);
             if (activeJob.mode === "t1") {
               setT1Results((prev) => [...prev, { name: it.style, before, after }]);
+            } else if (activeJob.mode === "t3") {
+              setT3Results((prev) => [...prev, { name: it.style, before, after }]);
             } else {
               setT2Result((prev) => ({
                 beforeAfter: { name: it.style, before, after },
@@ -384,6 +399,51 @@ function MainApp() {
     startJob("t2", items, t2Styles, img);
   };
 
+  // ---- Template 3 (Front & Back, alles Vorher/Nachher-Templates) ----
+  const setT3File = async (file: File | null) => {
+    setError(null);
+    setT3Results([]);
+    if (!file) {
+      setT3(null);
+      return;
+    }
+    const src = await readFileAsDataUrl(file);
+    const img = await loadImage(src);
+    setT3({ src, img });
+  };
+
+  const toggleT3Style = (name: string) =>
+    setT3Styles((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+
+  const t3Ready = !!t3 && t3Styles.length > 0 && !busy;
+
+  const runT3 = () => {
+    if (!t3Ready || !t3) return;
+    const img = imageToApiDataUrl(t3.img);
+    // Pro Frisur zwei Elemente: Front + Back — alle als Hochformat-Templates
+    const items: Record<string, unknown>[] = [];
+    const styles: string[] = [];
+    t3Styles.forEach((name, i) => {
+      const s = ALL_STYLES.find((x) => x.name === name)!;
+      items.push({
+        idx: i * 2,
+        style: `${name} · Front`,
+        prompt: gptPrompt(s.name, s.details),
+        size: "1024x1536",
+      });
+      items.push({
+        idx: i * 2 + 1,
+        style: `${name} · Back`,
+        prompt: gptBackPrompt(s.name, s.details),
+        size: "1024x1536",
+      });
+      styles.push(`${name} · Front`, `${name} · Back`);
+    });
+    startJob("t3", items, styles, img);
+  };
+
   const downloadAllAfters = (results: AfterResult[]) =>
     saveImages(
       results.map((r, i) => ({
@@ -437,6 +497,20 @@ function MainApp() {
             Template 2
             <span className="mt-0.5 block text-xs font-normal opacity-70">
               one image · many styles
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("t3")}
+            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+              mode === "t3"
+                ? "border-ink bg-ink text-white"
+                : "border-paper-border bg-white text-ink-muted hover:border-ink hover:text-ink"
+            }`}
+          >
+            Template 3
+            <span className="mt-0.5 block text-xs font-normal opacity-70">
+              front & back · all before/after
             </span>
           </button>
         </div>
@@ -593,7 +667,7 @@ function MainApp() {
               </div>
             )}
           </section>
-        ) : (
+        ) : mode === "t2" ? (
           <section className="space-y-6">
             <div className="panel p-6">
               <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
@@ -729,6 +803,140 @@ function MainApp() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </section>
+        ) : (
+          <section className="space-y-6">
+            <div className="panel p-6">
+              <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
+                1 · Add one image
+              </h2>
+              <div className="mt-4">
+                {t3 ? (
+                  <div className="flex items-center gap-4">
+                    <img src={t3.src} alt="" className="h-20 w-20 rounded-lg object-cover" />
+                    <button
+                      type="button"
+                      className="text-xs text-ink-faint hover:text-ink hover:underline"
+                      onClick={() => setT3File(null)}
+                    >
+                      remove
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
+                    + Add image
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => setT3File(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="panel p-6">
+              <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
+                2 · Pick hairstyles ({t3Styles.length} selected)
+              </h2>
+              <p className="mt-2 text-sm text-ink-muted">
+                Each style → a <strong>front</strong> and a <strong>back</strong> view, both
+                as editable before/after templates.
+              </p>
+              <div className="mt-4 max-h-72 space-y-4 overflow-y-auto pr-1">
+                {HAIRCUT_GROUPS.map((group) => (
+                  <div key={group.group}>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                      {group.group}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {group.cuts.map((cut) => {
+                        const idx = t3Styles.indexOf(cut.name);
+                        return (
+                          <button
+                            key={cut.name}
+                            type="button"
+                            title={cut.details}
+                            onClick={() => toggleT3Style(cut.name)}
+                            className={`chip ${idx >= 0 ? "chip-active" : ""}`}
+                          >
+                            {idx >= 0 ? `${idx + 1} · ${cut.name}` : cut.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {jobs.length > 0 && <ProgressTracker jobs={jobs} />}
+            {busy && (
+              <p className="text-center text-xs text-ink-faint">
+                Runs in the background — you can close this page and come back later.
+              </p>
+            )}
+            {busy ? (
+              <button
+                type="button"
+                className="w-full rounded-full border border-red-300 bg-white py-4 text-sm font-medium uppercase tracking-widest text-red-600 transition hover:bg-red-50"
+                onClick={clearJob}
+              >
+                Cancel generation
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary w-full py-4 text-sm uppercase tracking-widest"
+                disabled={!t3Ready}
+                onClick={runT3}
+              >
+                {`Generate (${t3Styles.length * 2 || 0} image${
+                  t3Styles.length * 2 === 1 ? "" : "s"
+                } · front & back)`}
+              </button>
+            )}
+
+            {t3Results.length > 0 && (
+              <div className="panel p-6">
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
+                    Results ({t3Results.length})
+                  </h2>
+                  <button
+                    type="button"
+                    className="btn-secondary text-xs"
+                    onClick={() =>
+                      saveImages(
+                        t3EditorRefs.current
+                          .map((r) => r?.getResult())
+                          .filter((x): x is { dataUrl: string; filename: string } => !!x)
+                      )
+                    }
+                  >
+                    Save all
+                  </button>
+                </div>
+                <p className="mb-4 text-xs text-ink-faint">
+                  Drag inside a template to reposition · sliders to zoom.
+                </p>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  {t3Results.map((r, i) => (
+                    <TemplateEditor
+                      key={i}
+                      ref={(el) => (t3EditorRefs.current[i] = el)}
+                      before={r.before}
+                      after={r.after}
+                      config={config}
+                      name={r.name}
+                      prefix="t3"
+                      index={i}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </section>
