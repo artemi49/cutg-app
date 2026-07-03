@@ -41,6 +41,39 @@
     @apply border-ink bg-ink text-white hover:text-white;
   }
 
+  /* Großer, gut greifbarer Zoom-Regler (v.a. für Handy) */
+  .range-lg {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    border-radius: 9999px;
+    background: #e5e5e5;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .range-lg::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 9999px;
+    background: #0a0a0a;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+  .range-lg::-moz-range-thumb {
+    width: 26px;
+    height: 26px;
+    border-radius: 9999px;
+    background: #0a0a0a;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+
+  .zoom-btn {
+    @apply flex h-10 w-10 shrink-0 select-none items-center justify-center rounded-xl border border-paper-border bg-white text-xl leading-none text-ink transition active:bg-paper-warm disabled:opacity-30;
+  }
+
   .scroll-box {
     @apply max-h-72 overflow-y-auto rounded-2xl border border-paper-border bg-paper-warm p-2;
     scrollbar-width: thin;

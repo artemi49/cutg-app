@@ -71,12 +71,13 @@ function imageToApiDataUrl(img: HTMLImageElement, maxDim = 1024): string {
 async function requestAfter(
   imageDataUrl: string,
   prompt: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  size?: string
 ): Promise<string> {
   const res = await fetch("/api/generate-after", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: imageDataUrl, prompt }),
+    body: JSON.stringify({ image: imageDataUrl, prompt, size }),
     signal,
   });
   const data = await res.json();
@@ -125,6 +126,29 @@ function MainApp() {
 
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef(false);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  const acquireWakeLock = async () => {
+    try {
+      const wl = (navigator as Navigator & { wakeLock?: WakeLock }).wakeLock;
+      if (wl) wakeLockRef.current = await wl.request("screen");
+    } catch {
+      /* Wake Lock optional */
+    }
+  };
+  const releaseWakeLock = () => {
+    wakeLockRef.current?.release().catch(() => {});
+    wakeLockRef.current = null;
+  };
+
+  // Wake Lock wird beim Wegtippen freigegeben → beim Zurückkommen erneut anfordern
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && isGenerating) acquireWakeLock();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [isGenerating]);
 
   const [t1, setT1] = useState<T1Item[]>([]);
   const [t1Results, setT1Results] = useState<TemplateResult[]>([]);
@@ -184,6 +208,7 @@ function MainApp() {
     setT1Results([]);
     t1EditorRefs.current = [];
     setJobs(t1.map((i) => ({ name: i.style, status: "pending" })));
+    acquireWakeLock();
     try {
       await ensureFonts();
       const results: TemplateResult[] = [];
@@ -212,6 +237,7 @@ function MainApp() {
     } finally {
       setIsGenerating(false);
       abortRef.current = null;
+      releaseWakeLock();
     }
   };
 
@@ -244,6 +270,7 @@ function MainApp() {
     setError(null);
     setT2Result(null);
     setJobs(t2Styles.map((name) => ({ name, status: "pending" })));
+    acquireWakeLock();
     try {
       await ensureFonts();
       let beforeAfter: TemplateResult | null = null;
@@ -255,7 +282,9 @@ function MainApp() {
         const afterUrl = await requestAfter(
           imageToApiDataUrl(t2.img),
           gptPrompt(style.name, style.details),
-          controller.signal
+          controller.signal,
+          // erstes Bild = Vorher/Nachher-Template (hochkant), die anderen = 1:1
+          i === 0 ? "1024x1536" : "1024x1024"
         );
         if (i === 0) {
           const afterImg = await loadImage(afterUrl);
@@ -276,6 +305,7 @@ function MainApp() {
     } finally {
       setIsGenerating(false);
       abortRef.current = null;
+      releaseWakeLock();
     }
   };
 
@@ -734,6 +764,14 @@ const TemplateEditor = forwardRef<
     setTransforms((t) => ({ ...t, [slot]: { ...t[slot], ...p } }));
   const reset = (slot: Slot) =>
     setTransforms((t) => ({ ...t, [slot]: { ...DEFAULT_TRANSFORM } }));
+  const stepZoom = (slot: Slot, delta: number) =>
+    setTransforms((t) => ({
+      ...t,
+      [slot]: {
+        ...t[slot],
+        scale: clamp(+(t[slot].scale + delta).toFixed(2), MIN_SCALE, MAX_SCALE),
+      },
+    }));
 
   return (
     <div className="space-y-2">
@@ -746,37 +784,59 @@ const TemplateEditor = forwardRef<
         className="block w-full cursor-grab touch-none rounded-lg border border-paper-border active:cursor-grabbing"
       />
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-medium text-ink">{name}</span>
+        <span className="truncate text-sm font-medium text-ink">{name}</span>
         <button
           type="button"
-          className="shrink-0 text-xs font-medium text-ink underline underline-offset-2"
+          className="shrink-0 rounded-lg border border-ink bg-ink px-4 py-2 text-xs font-medium text-white active:bg-neutral-800"
           onClick={save}
         >
           Save
         </button>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-3">
         {(["before", "after"] as const).map((slot) => (
-          <div key={slot} className="flex items-center gap-2">
-            <span className="w-10 text-[10px] uppercase tracking-wider text-ink-faint">
-              {slot}
-            </span>
-            <input
-              type="range"
-              min={MIN_SCALE}
-              max={MAX_SCALE}
-              step={0.01}
-              value={transforms[slot].scale}
-              onChange={(e) => patch(slot, { scale: Number(e.target.value) })}
-              className="h-1 flex-1 cursor-pointer accent-ink"
-            />
-            <button
-              type="button"
-              className="shrink-0 text-[10px] text-ink-faint hover:text-ink"
-              onClick={() => reset(slot)}
-            >
-              reset
-            </button>
+          <div key={slot}>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                {slot} · zoom
+              </span>
+              <button
+                type="button"
+                className="text-[11px] text-ink-faint underline-offset-2 active:text-ink"
+                onClick={() => reset(slot)}
+              >
+                reset
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label={`zoom out ${slot}`}
+                className="zoom-btn"
+                onClick={() => stepZoom(slot, -0.15)}
+                disabled={transforms[slot].scale <= MIN_SCALE}
+              >
+                −
+              </button>
+              <input
+                type="range"
+                min={MIN_SCALE}
+                max={MAX_SCALE}
+                step={0.01}
+                value={transforms[slot].scale}
+                onChange={(e) => patch(slot, { scale: Number(e.target.value) })}
+                className="range-lg flex-1"
+              />
+              <button
+                type="button"
+                aria-label={`zoom in ${slot}`}
+                className="zoom-btn"
+                onClick={() => stepZoom(slot, 0.15)}
+                disabled={transforms[slot].scale >= MAX_SCALE}
+              >
+                +
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -834,7 +894,7 @@ function AfterCard({ result, index }: { result: AfterResult; index: number }) {
       <img
         src={result.dataUrl}
         alt={result.name}
-        className="w-full rounded-lg border border-paper-border"
+        className="aspect-square w-full rounded-lg border border-paper-border object-cover"
       />
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-xs text-ink-muted">{result.name}</span>
