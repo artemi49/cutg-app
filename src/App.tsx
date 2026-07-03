@@ -68,25 +68,39 @@ function imageToApiDataUrl(img: HTMLImageElement, maxDim = 1024): string {
   return canvas.toDataURL("image/jpeg", 0.9);
 }
 
-async function requestAfter(
-  imageDataUrl: string,
-  prompt: string,
-  signal?: AbortSignal,
-  size?: string
-): Promise<string> {
-  const res = await fetch("/api/generate-after", {
+// Supabase (HairLab) – öffentliche Werte, kein Geheimnis. Der OpenAI-Key liegt
+// nur serverseitig als Edge-Function-Secret.
+const SUPABASE_URL = "https://cchuanvedsetkwfskskf.supabase.co";
+const SUPABASE_ANON =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjaHVhbnZlZHNldGt3ZnNrc2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzNDk2NjMsImV4cCI6MjA5NTkyNTY2M30.0YlMOTA2mgiHkLBiFcIPG-4s09O0j4BGxVlfswKdz4g";
+const JOB_STORAGE_KEY = "cutg_active_job";
+
+async function sbRpc(fn: string, body: Record<string, unknown>): Promise<unknown> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: imageDataUrl, prompt, size }),
-    signal,
+    headers: {
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${SUPABASE_ANON}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || "Generation failed");
-  return data.image as string;
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${fn}: ${res.status} ${text}`);
+  return text ? JSON.parse(text) : null;
 }
 
-function isAbort(err: unknown) {
-  return err instanceof DOMException && err.name === "AbortError";
+interface ActiveJob {
+  id: string;
+  mode: Mode;
+  styles: string[];
+}
+interface JobState {
+  id: string;
+  status: string;
+  done: number;
+  total: number;
+  items: { idx: number; style: string; status: string; error: string | null }[];
 }
 
 function safeName(name: string) {
@@ -120,35 +134,10 @@ function MainApp() {
   const [mode, setMode] = useState<Mode>("t1");
   const [brandName, setBrandName] = useState("CutG");
   const [showBranding, setShowBranding] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  const abortRef = useRef<AbortController | null>(null);
-  const cancelRef = useRef(false);
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-
-  const acquireWakeLock = async () => {
-    try {
-      const wl = (navigator as Navigator & { wakeLock?: WakeLock }).wakeLock;
-      if (wl) wakeLockRef.current = await wl.request("screen");
-    } catch {
-      /* Wake Lock optional */
-    }
-  };
-  const releaseWakeLock = () => {
-    wakeLockRef.current?.release().catch(() => {});
-    wakeLockRef.current = null;
-  };
-
-  // Wake Lock wird beim Wegtippen freigegeben → beim Zurückkommen erneut anfordern
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && isGenerating) acquireWakeLock();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [isGenerating]);
+  const [activeJob, setActiveJob] = useState<ActiveJob | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobState | null>(null);
+  const loadedIdx = useRef<Set<number>>(new Set());
 
   const [t1, setT1] = useState<T1Item[]>([]);
   const [t1Results, setT1Results] = useState<TemplateResult[]>([]);
@@ -165,6 +154,16 @@ function MainApp() {
 
   useEffect(() => {
     ensureFonts();
+    const raw = localStorage.getItem(JOB_STORAGE_KEY);
+    if (raw) {
+      try {
+        const job = JSON.parse(raw) as ActiveJob;
+        setActiveJob(job);
+        setMode(job.mode); // zurück auf den Tab des laufenden Auftrags
+      } catch {
+        localStorage.removeItem(JOB_STORAGE_KEY);
+      }
+    }
   }, []);
 
   const config: BlueprintConfig = useMemo(
@@ -177,6 +176,137 @@ function MainApp() {
     }),
     [showBranding, brandName]
   );
+
+  const busy = !!activeJob && (!jobStatus || jobStatus.status !== "done");
+
+  const jobs: Job[] = (jobStatus?.items ?? []).map((i) => ({
+    name: i.style,
+    status:
+      i.status === "processing"
+        ? "active"
+        : i.status === "done"
+          ? "done"
+          : i.status === "error"
+            ? "error"
+            : "pending",
+  }));
+
+  const clearJob = () => {
+    const id = activeJob?.id;
+    localStorage.removeItem(JOB_STORAGE_KEY);
+    setActiveJob(null);
+    setJobStatus(null);
+    setT1Results([]);
+    setT2Result(null);
+    loadedIdx.current = new Set();
+    t1EditorRefs.current = [];
+    if (id) sbRpc("mkt_delete_job", { p_job: id }).catch(() => {});
+  };
+
+  const startJob = async (
+    m: Mode,
+    items: Record<string, unknown>[],
+    styles: string[],
+    sharedImage?: string
+  ) => {
+    setError(null);
+    setT1Results([]);
+    setT2Result(null);
+    t1EditorRefs.current = [];
+    loadedIdx.current = new Set();
+    setJobStatus({
+      id: "",
+      status: "processing",
+      done: 0,
+      total: items.length,
+      items: styles.map((s, i) => ({ idx: i, style: s, status: "pending", error: null })),
+    });
+    try {
+      const body: Record<string, unknown> = { p_items: items };
+      if (sharedImage) body.p_shared_image = sharedImage;
+      const jobId = (await sbRpc("mkt_create_job", body)) as string;
+      const job: ActiveJob = { id: jobId, mode: m, styles };
+      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(job));
+      setActiveJob(job);
+    } catch (e) {
+      setError(
+        e instanceof Error && /load failed|networkerror|failed to fetch/i.test(e.message)
+          ? "Could not reach the server — check your connection and try again."
+          : e instanceof Error
+            ? e.message
+            : "Could not start the job"
+      );
+      setJobStatus(null);
+    }
+  };
+
+  // Status pollen – läuft weiter, auch wenn man die Seite verlässt und zurückkommt
+  useEffect(() => {
+    if (!activeJob) return;
+    let stop = false;
+    let timer: number | undefined;
+    const tick = async () => {
+      if (stop) return;
+      try {
+        const data = (await sbRpc("mkt_get_job", {
+          p_job: activeJob.id,
+        })) as JobState | null;
+        if (stop) return;
+        if (!data) {
+          clearJob();
+          return;
+        }
+        setJobStatus(data);
+        if (data.status === "done") return;
+      } catch {
+        /* retry beim nächsten Tick */
+      }
+      timer = window.setTimeout(tick, 3000);
+    };
+    tick();
+    return () => {
+      stop = true;
+      if (timer) clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob]);
+
+  // Fertige Elemente einmalig laden und rendern
+  useEffect(() => {
+    if (!activeJob || !jobStatus) return;
+    (async () => {
+      for (const it of jobStatus.items) {
+        if (it.status !== "done" || loadedIdx.current.has(it.idx)) continue;
+        loadedIdx.current.add(it.idx);
+        try {
+          const r = (await sbRpc("mkt_get_result", {
+            p_job: activeJob.id,
+            p_idx: it.idx,
+          })) as { image: string; result: string } | null;
+          if (!r || !r.result) continue;
+          if (activeJob.mode === "t2" && it.idx > 0) {
+            setT2Result((prev) => ({
+              beforeAfter: prev?.beforeAfter ?? null,
+              afters: [...(prev?.afters ?? []), { name: it.style, dataUrl: r.result }],
+            }));
+          } else {
+            const before = await loadImage(r.image);
+            const after = await loadImage(r.result);
+            if (activeJob.mode === "t1") {
+              setT1Results((prev) => [...prev, { name: it.style, before, after }]);
+            } else {
+              setT2Result((prev) => ({
+                beforeAfter: { name: it.style, before, after },
+                afters: prev?.afters ?? [],
+              }));
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    })();
+  }, [jobStatus, activeJob]);
 
   // ---- Template 1 ----
   const addT1Files = async (files: FileList | null) => {
@@ -196,49 +326,25 @@ function MainApp() {
 
   const removeT1 = (id: number) => setT1((prev) => prev.filter((i) => i.id !== id));
 
-  const t1Ready = t1.length > 0 && t1.every((i) => i.style) && !isGenerating;
+  const t1Ready = t1.length > 0 && t1.every((i) => i.style) && !busy;
 
-  const runT1 = async () => {
+  const runT1 = () => {
     if (!t1Ready) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    cancelRef.current = false;
-    setIsGenerating(true);
-    setError(null);
-    setT1Results([]);
-    t1EditorRefs.current = [];
-    setJobs(t1.map((i) => ({ name: i.style, status: "pending" })));
-    acquireWakeLock();
-    try {
-      await ensureFonts();
-      const results: TemplateResult[] = [];
-      for (let i = 0; i < t1.length; i++) {
-        if (cancelRef.current) break;
-        setJobs((prev) => prev.map((j, k) => (k === i ? { ...j, status: "active" } : j)));
-        const item = t1[i];
-        const style = ALL_STYLES.find((s) => s.name === item.style)!;
-        const afterUrl = await requestAfter(
-          imageToApiDataUrl(item.img),
-          gptPrompt(style.name, style.details),
-          controller.signal
-        );
-        const afterImg = await loadImage(afterUrl);
-        results.push({ name: style.name, before: item.img, after: afterImg });
-        setT1Results([...results]);
-        setJobs((prev) => prev.map((j, k) => (k === i ? { ...j, status: "done" } : j)));
-      }
-    } catch (err) {
-      if (!isAbort(err) && !cancelRef.current) {
-        setError(err instanceof Error ? err.message : "Generation failed");
-        setJobs((prev) =>
-          prev.map((j) => (j.status === "active" ? { ...j, status: "error" } : j))
-        );
-      }
-    } finally {
-      setIsGenerating(false);
-      abortRef.current = null;
-      releaseWakeLock();
-    }
+    const items = t1.map((it, i) => {
+      const s = ALL_STYLES.find((x) => x.name === it.style)!;
+      return {
+        idx: i,
+        image: imageToApiDataUrl(it.img),
+        style: it.style,
+        prompt: gptPrompt(s.name, s.details),
+        size: "1024x1536",
+      };
+    });
+    startJob(
+      "t1",
+      items,
+      t1.map((i) => i.style)
+    );
   };
 
   // ---- Template 2 ----
@@ -259,59 +365,23 @@ function MainApp() {
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
 
-  const t2Ready = !!t2 && t2Styles.length > 0 && !isGenerating;
+  const t2Ready = !!t2 && t2Styles.length > 0 && !busy;
 
-  const runT2 = async () => {
+  const runT2 = () => {
     if (!t2Ready || !t2) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    cancelRef.current = false;
-    setIsGenerating(true);
-    setError(null);
-    setT2Result(null);
-    setJobs(t2Styles.map((name) => ({ name, status: "pending" })));
-    acquireWakeLock();
-    try {
-      await ensureFonts();
-      let beforeAfter: TemplateResult | null = null;
-      const afters: AfterResult[] = [];
-      for (let i = 0; i < t2Styles.length; i++) {
-        if (cancelRef.current) break;
-        setJobs((prev) => prev.map((j, k) => (k === i ? { ...j, status: "active" } : j)));
-        const style = ALL_STYLES.find((s) => s.name === t2Styles[i])!;
-        const afterUrl = await requestAfter(
-          imageToApiDataUrl(t2.img),
-          gptPrompt(style.name, style.details),
-          controller.signal,
-          // erstes Bild = Vorher/Nachher-Template (hochkant), die anderen = 1:1
-          i === 0 ? "1024x1536" : "1024x1024"
-        );
-        if (i === 0) {
-          const afterImg = await loadImage(afterUrl);
-          beforeAfter = { name: style.name, before: t2.img, after: afterImg };
-        } else {
-          afters.push({ name: style.name, dataUrl: afterUrl });
-        }
-        setT2Result({ beforeAfter, afters: [...afters] });
-        setJobs((prev) => prev.map((j, k) => (k === i ? { ...j, status: "done" } : j)));
-      }
-    } catch (err) {
-      if (!isAbort(err) && !cancelRef.current) {
-        setError(err instanceof Error ? err.message : "Generation failed");
-        setJobs((prev) =>
-          prev.map((j) => (j.status === "active" ? { ...j, status: "error" } : j))
-        );
-      }
-    } finally {
-      setIsGenerating(false);
-      abortRef.current = null;
-      releaseWakeLock();
-    }
-  };
-
-  const cancelGeneration = () => {
-    cancelRef.current = true;
-    abortRef.current?.abort();
+    const img = imageToApiDataUrl(t2.img);
+    // Bild NICHT pro Element mitschicken – einmal als sharedImage (kleiner Upload)
+    const items = t2Styles.map((name, i) => {
+      const s = ALL_STYLES.find((x) => x.name === name)!;
+      return {
+        idx: i,
+        style: name,
+        prompt: gptPrompt(s.name, s.details),
+        // erstes Bild = Vorher/Nachher-Template (hochkant), die anderen = 1:1
+        size: i === 0 ? "1024x1536" : "1024x1024",
+      };
+    });
+    startJob("t2", items, t2Styles, img);
   };
 
   const downloadAllAfters = (results: AfterResult[]) =>
@@ -457,11 +527,16 @@ function MainApp() {
             </div>
 
             {jobs.length > 0 && <ProgressTracker jobs={jobs} />}
-            {isGenerating ? (
+            {busy && (
+              <p className="text-center text-xs text-ink-faint">
+                Runs in the background — you can close this page and come back later.
+              </p>
+            )}
+            {busy ? (
               <button
                 type="button"
                 className="w-full rounded-full border border-red-300 bg-white py-4 text-sm font-medium uppercase tracking-widest text-red-600 transition hover:bg-red-50"
-                onClick={cancelGeneration}
+                onClick={clearJob}
               >
                 Cancel generation
               </button>
@@ -585,11 +660,16 @@ function MainApp() {
             </div>
 
             {jobs.length > 0 && <ProgressTracker jobs={jobs} />}
-            {isGenerating ? (
+            {busy && (
+              <p className="text-center text-xs text-ink-faint">
+                Runs in the background — you can close this page and come back later.
+              </p>
+            )}
+            {busy ? (
               <button
                 type="button"
                 className="w-full rounded-full border border-red-300 bg-white py-4 text-sm font-medium uppercase tracking-widest text-red-600 transition hover:bg-red-50"
-                onClick={cancelGeneration}
+                onClick={clearJob}
               >
                 Cancel generation
               </button>
