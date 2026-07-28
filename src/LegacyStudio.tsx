@@ -16,13 +16,14 @@ import type { ImageTransform } from "./blueprint";
 import {
   BEARD_STYLES,
   DEFAULT_TEXTS,
-  HAIRCUT_GROUPS,
+  GENDERS,
+  HAIRCUT_GROUPS_BY_GENDER,
   LANGUAGES,
   UI_LABELS,
   buildBeardPrompt,
   buildHaircutPrompt,
 } from "./constants";
-import type { BlueprintConfig, Language } from "./types";
+import type { BlueprintConfig, Gender, Language } from "./types";
 
 type ImageSlot = "before" | "after";
 
@@ -31,6 +32,9 @@ const clamp = (v: number, min: number, max: number) =>
 
 export default function LegacyStudio() {
   const [language, setLanguage] = useState<Language>("en");
+  const [gender, setGender] = useState<Gender>(
+    () => (localStorage.getItem("cutg_gender") as Gender) ?? "men"
+  );
   const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
   const [afterUrl, setAfterUrl] = useState<string | null>(null);
   const [texts, setTexts] = useState(DEFAULT_TEXTS.en);
@@ -287,11 +291,34 @@ export default function LegacyStudio() {
           </section>
 
           <section className="panel p-6">
-            <div className="mb-1 flex items-center gap-2">
-              <span className="text-base">✂️</span>
-              <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-                Hairstyles · copy prompt
-              </h2>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">✂️</span>
+                <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
+                  Hairstyles · copy prompt
+                </h2>
+              </div>
+              <div className="flex rounded-full border border-paper-border bg-paper-warm p-1">
+                {GENDERS.map((g) => (
+                  <button
+                    key={g.code}
+                    type="button"
+                    aria-pressed={gender === g.code}
+                    onClick={() => {
+                      setGender(g.code);
+                      localStorage.setItem("cutg_gender", g.code);
+                    }}
+                    className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                      gender === g.code
+                        ? "bg-ink text-white"
+                        : "text-ink-muted hover:text-ink"
+                    }`}
+                  >
+                    <span aria-hidden>{g.icon}</span>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <p className="mt-2 text-sm text-ink-muted">
               Tap a style → the JSON prompt is copied to your clipboard. Paste it in{" "}
@@ -307,32 +334,40 @@ export default function LegacyStudio() {
             </p>
 
             <div className="mt-4 max-h-80 space-y-4 overflow-y-auto pr-1">
-              {HAIRCUT_GROUPS.map((group) => (
+              {HAIRCUT_GROUPS_BY_GENDER[gender].map((group) => (
                 <div key={group.group}>
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
                     {group.group}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {group.cuts.map((cut) => (
-                      <button
-                        key={cut.name}
-                        type="button"
-                        title={cut.details}
-                        onClick={() =>
-                          copyPrompt(buildHaircutPrompt(cut.name, cut.details), cut.name)
-                        }
-                        className={`chip ${copiedCut === cut.name ? "chip-active" : ""}`}
-                      >
-                        {copiedCut === cut.name ? "✓ Copied" : cut.name}
-                      </button>
-                    ))}
+                    {group.cuts.map((cut) => {
+                      const key = `${gender}:${cut.name}`;
+                      return (
+                        <button
+                          key={cut.name}
+                          type="button"
+                          title={cut.details}
+                          onClick={() => copyPrompt(buildHaircutPrompt(cut, gender), key)}
+                          className={`chip ${copiedCut === key ? "chip-active" : ""}`}
+                        >
+                          {copiedCut === key ? (
+                            "✓ Copied"
+                          ) : (
+                            <>
+                              {cut.kind === "color" && <span aria-hidden>◐ </span>}
+                              {cut.name}
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="panel p-6">
+          <section className={`panel p-6 ${gender === "men" ? "" : "hidden"}`}>
             <div className="mb-1 flex items-center gap-2">
               <span className="text-base">🧔</span>
               <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">

@@ -1,4 +1,10 @@
-import type { BlueprintTexts, Language } from "./types";
+import type {
+  BlueprintTexts,
+  Gender,
+  HairStyle,
+  HairstyleGroup,
+  Language,
+} from "./types";
 
 export const DEFAULT_TEXTS: Record<Language, BlueprintTexts> = {
   de: {
@@ -134,10 +140,7 @@ export const UI_LABELS: Record<
 };
 
 /** Moderne Männer-Trendfrisuren für Lumina (GPT Image 2), gruppiert */
-export const HAIRCUT_GROUPS: {
-  group: string;
-  cuts: { name: string; details: string }[];
-}[] = [
+export const HAIRCUT_GROUPS: HairstyleGroup[] = [
   {
     group: "Trend 2026",
     cuts: [
@@ -187,6 +190,146 @@ export const HAIRCUT_GROUPS: {
     ],
   },
 ];
+
+/** Moderne Frauen-Trendfrisuren für Lumina (GPT Image 2), gruppiert */
+export const WOMEN_HAIRCUT_GROUPS: HairstyleGroup[] = [
+  {
+    group: "Trend 2026",
+    cuts: [
+      { name: "Butterfly Cut", details: "long hair with heavily layered shorter face-framing pieces that flick outward like butterfly wings, big blow-dried volume around the face" },
+      { name: "Curtain Bangs", details: "soft curtain bangs parted in the middle and swept open to both sides, blending seamlessly into face-framing layers" },
+      { name: "Wolf Cut", details: "shaggy wolf cut between a shag and a mullet: choppy volume and short layers on top, wispy longer lengths at the back, heavy texture" },
+      { name: "Italian Bob", details: "jaw- to chin-length bob with soft rounded volume and the ends bending slightly inward, glossy Italian summer finish" },
+      { name: "French Bob", details: "short blunt bob ending just below the ears with a full straight fringe, effortless Parisian finish" },
+      { name: "Bixie Cut", details: "hybrid of bob and pixie: short cropped textured layers around the ears and nape with slightly longer piecey length on top" },
+      { name: "Shaggy Lob", details: "shoulder-length lob with choppy shag layers, soft bangs and lived-in undone texture" },
+      { name: "Wispy Bangs", details: "fine airy see-through fringe skimming the eyebrows, soft wispy ends, rest of the length kept long" },
+      { name: "Birkin Bangs", details: "full soft 70s fringe splitting slightly in the middle, worn with long straight hair and gentle movement" },
+      { name: "Jellyfish Cut", details: "sharply disconnected short bowl-shaped layer around the crown sitting over long straight lengths underneath, avant-garde jellyfish silhouette" },
+      { name: "Octopus Cut", details: "short choppy volume through the crown with long thin wispy tendrils falling underneath, heavily layered octopus shape" },
+      { name: "Ghost Layers", details: "long hair with invisible internal layers: the ends stay blunt and thick while the hair gains soft movement" },
+      { name: "Blunt Cut with Face Frame", details: "one-length blunt cut with sharp thick ends plus soft shorter face-framing pieces at the front" },
+      { name: "Bottleneck Bangs", details: "bangs shorter and rounded in the middle and longer at the sides, curving out like a bottleneck into the lengths" },
+      { name: "Modern Mullet", details: "contemporary feminine mullet with short choppy top and bangs and longer textured length at the back, edgy but wearable" },
+    ],
+  },
+  {
+    group: "Bobs & Lobs",
+    cuts: [
+      { name: "Classic Bob", details: "clean chin-length bob, one length all around with a soft rounded shape" },
+      { name: "Blunt Bob", details: "sharp blunt bob cut in a straight hard line at jaw level, thick heavy ends, sleek glossy finish" },
+      { name: "A-Line Bob", details: "bob angled shorter at the back and gradually longer toward the front, sharp A-line silhouette" },
+      { name: "Inverted Bob", details: "stacked graduated bob with short layered volume at the back and longer front pieces" },
+      { name: "Textured Bob", details: "jaw-length bob with choppy razored ends and tousled piecey texture" },
+      { name: "Bob with Curtain Bangs", details: "chin-length bob paired with soft curtain bangs parted in the middle" },
+      { name: "Micro Bob", details: "very short blunt bob cut high above the jaw, sitting just under the ears, bold and sharp" },
+      { name: "Wavy Lob", details: "collarbone-length lob styled in loose soft waves with airy movement" },
+      { name: "Sleek Lob", details: "shoulder-grazing lob blow-dried perfectly straight and glassy with a subtle inward bend" },
+      { name: "Asymmetric Bob", details: "bob with one side noticeably longer than the other, sharp asymmetric line" },
+      { name: "Layered Bob", details: "bob with soft internal layers for movement and lift, rounded voluminous shape" },
+      { name: "Bob with Bangs", details: "chin-length bob with a full blunt fringe straight across the eyebrows" },
+    ],
+  },
+  {
+    group: "Long & Layered",
+    cuts: [
+      { name: "Long Layers", details: "long hair with soft cascading layers running from the cheekbones down, natural movement and body" },
+      { name: "Face-Framing Layers", details: "long hair with shorter layers cut around the face to frame the cheekbones and jaw, flicked away from the face" },
+      { name: "V-Cut Long Hair", details: "very long hair cut into a sharp V shape at the back with long tapering layers" },
+      { name: "U-Cut Long Hair", details: "long hair with a soft rounded U-shaped hem and gentle layering" },
+      { name: "Bouncy Blowout", details: "long hair blow-dried with a big round brush into bouncy rounded volume and flicked ends, glossy salon blowout" },
+      { name: "Beach Waves", details: "long relaxed beachy waves with soft undone texture and a matte lived-in finish" },
+      { name: "Hollywood Waves", details: "long polished old-Hollywood waves, deep uniform S-shaped glossy waves brushed out smooth" },
+      { name: "Sleek Straight", details: "long hair flat-ironed pin straight with a glassy mirror shine and a sharp clean hem" },
+      { name: "Feathered Layers", details: "long 70s feathered layers flicking away from the face, soft winged movement" },
+      { name: "Butterfly Layers XL", details: "extra long hair with dramatic stacked short-to-long layering for maximum volume around the face" },
+      { name: "Straight with Middle Part", details: "long straight hair with a clean middle part falling smoothly on both sides of the face" },
+    ],
+  },
+  {
+    group: "Curly & Coily",
+    cuts: [
+      { name: "Curly Shag", details: "curly hair cut into a shaggy layered shape with curly bangs and lots of defined volume" },
+      { name: "Curly Bob", details: "chin-length curly bob with defined springy curls and rounded volume" },
+      { name: "Bouncy Ringlets", details: "long hair in defined bouncy spiral ringlet curls, shiny and well moisturised" },
+      { name: "Wash and Go Curls", details: "natural defined wash-and-go curls with even curl pattern, soft frizz-free finish" },
+      { name: "Layered Curls", details: "long curly hair with long internal layers so the curls fall in a soft cascading shape" },
+      { name: "Curly Pixie", details: "short curly pixie with defined curls on top and tapered short sides" },
+      { name: "Natural Afro", details: "full rounded natural afro with even soft volume all around, freshly picked out" },
+      { name: "Twist Out", details: "twist-out style with defined stretched coils and soft separated volume" },
+      { name: "Coily Tapered Cut", details: "natural coily hair kept full on top with a clean tapered fade at the sides and nape" },
+      { name: "Curly Lob", details: "shoulder-length curly lob with soft layers and defined curl clumps" },
+      { name: "Wavy Bronde Layers", details: "loose natural waves with soft layers and effortless air-dried texture" },
+    ],
+  },
+  {
+    group: "Short & Pixie",
+    cuts: [
+      { name: "Classic Pixie", details: "short pixie cut, cropped close at the back and sides with a slightly longer textured top" },
+      { name: "Long Pixie", details: "grown-out pixie with longer piecey top and fringe swept to one side" },
+      { name: "Pixie with Bangs", details: "short pixie with a soft wispy fringe falling onto the forehead" },
+      { name: "Undercut Pixie", details: "pixie with a shaved or very short undercut at the sides and nape and a longer disconnected top" },
+      { name: "Textured Crop", details: "short cropped cut with choppy piecey texture on top and a short soft fringe" },
+      { name: "Short Shag", details: "short shaggy cut with heavy choppy layers and a fringe, rock-and-roll texture" },
+      { name: "Bowl Cut Modern", details: "modern rounded bowl-shaped cut with a strong blunt line and soft texture" },
+      { name: "Buzz Cut", details: "very short evenly buzzed hair all over, clean and bold" },
+      { name: "Mixie Cut", details: "mullet-pixie mix: short cropped front and sides with a slightly longer soft nape" },
+      { name: "Sleek Short Bob", details: "very short sleek bob at ear length, blow-dried smooth and tucked behind the ears" },
+    ],
+  },
+  {
+    group: "Braids & Updos",
+    cuts: [
+      { name: "Knotless Box Braids", details: "long knotless box braids with neat square parting and smooth flat roots" },
+      { name: "Fulani Braids", details: "Fulani braid style with a centre cornrow, side braids and fine braided lengths with beads" },
+      { name: "Cornrows", details: "neat straight-back cornrows braided close to the scalp with clean even partings" },
+      { name: "Goddess Braids", details: "thick braided goddess braids with soft curly wavy pieces left out along the braids" },
+      { name: "Boxer Braids", details: "two tight Dutch braids running straight back from a centre parting" },
+      { name: "Sleek High Ponytail", details: "very sleek high ponytail with a glassy smooth pulled-back top and long straight length" },
+      { name: "Bubble Ponytail", details: "long ponytail segmented into rounded bubbles with hair ties" },
+      { name: "Messy Bun", details: "relaxed high messy bun with soft face-framing strands left loose" },
+      { name: "Sleek Low Bun", details: "polished low bun at the nape with a smooth glossy pulled-back top and a middle part" },
+      { name: "Space Buns", details: "two playful buns placed high on both sides of the head" },
+      { name: "Half Up Half Down", details: "top section pulled back and secured while the rest falls loose in soft waves" },
+      { name: "French Twist", details: "elegant French twist with the hair rolled and pinned vertically at the back of the head" },
+    ],
+  },
+  {
+    group: "Color & Balayage",
+    cuts: [
+      { name: "Caramel Balayage", details: "sun-kissed caramel balayage hand-painted from mid-lengths to ends over a warm brunette base, soft seamless blend", kind: "color" },
+      { name: "Money Piece", details: "bright lightened money-piece sections framing the face at the front, rest of the hair kept in the natural base colour", kind: "color" },
+      { name: "Platinum Blonde", details: "icy platinum blonde from root to tip, cool clean toneless finish", kind: "color" },
+      { name: "Honey Blonde", details: "warm honey blonde with soft golden dimension throughout", kind: "color" },
+      { name: "Babylights", details: "fine delicate babylights woven through the top sections for a naturally sun-lightened look", kind: "color" },
+      { name: "Copper Red", details: "vivid copper red, glossy and saturated from root to tip", kind: "color" },
+      { name: "Chocolate Brunette", details: "rich glossy chocolate brunette with subtle warm depth", kind: "color" },
+      { name: "Ash Brown", details: "cool smoky ash brown with neutral matte tones and no warmth", kind: "color" },
+      { name: "Ombré", details: "dark natural roots melting gradually into much lighter ends, smooth ombré gradient", kind: "color" },
+      { name: "Silver Grey", details: "cool metallic silver grey with a soft shadowed root", kind: "color" },
+      { name: "Cherry Cola", details: "deep cherry cola red-brown with glossy red reflections", kind: "color" },
+      { name: "Peekaboo Color", details: "hidden vivid peekaboo colour panel underneath the top layer, only visible when the hair moves", kind: "color" },
+    ],
+  },
+];
+
+/** Style-Bibliothek je Zielgruppe */
+export const HAIRCUT_GROUPS_BY_GENDER: Record<Gender, HairstyleGroup[]> = {
+  men: HAIRCUT_GROUPS,
+  women: WOMEN_HAIRCUT_GROUPS,
+};
+
+export const GENDERS: { code: Gender; label: string; icon: string }[] = [
+  { code: "men", label: "Men", icon: "💈" },
+  { code: "women", label: "Women", icon: "💇‍♀️" },
+];
+
+export const allStyles = (gender: Gender): HairStyle[] =>
+  HAIRCUT_GROUPS_BY_GENDER[gender].flatMap((g) => g.cuts);
+
+/** Findet einen Style innerhalb der gewählten Zielgruppe (Namen können sich zwischen den Gruppen überschneiden) */
+export const findStyle = (gender: Gender, name: string): HairStyle | undefined =>
+  allStyles(gender).find((s) => s.name === name);
 
 /** Moderne Bart-Styles für Lumina */
 export const BEARD_STYLES: { name: string; details: string }[] = [
@@ -253,40 +396,71 @@ export function buildBeardPrompt(name: string, details: string): string {
   );
 }
 
-/** Baut einen JSON-Prompt, der NUR die Haare verändert (Gesicht/Identität bleibt) */
-export function buildHaircutPrompt(name: string, details: string): string {
+/** Sprachbausteine je Zielgruppe – halten alle Prompts konsistent */
+export const SUBJECT: Record<Gender, { noun: string; possessive: string; venue: string }> = {
+  men: { noun: "man", possessive: "his", venue: "barbershop" },
+  women: { noun: "woman", possessive: "her", venue: "hair salon" },
+};
+
+/** Baut einen JSON-Prompt, der NUR die Haare (bzw. NUR die Haarfarbe) verändert */
+export function buildHaircutPrompt(style: HairStyle, gender: Gender): string {
+  const { noun, possessive, venue } = SUBJECT[gender];
+  const isColor = style.kind === "color";
+
+  const keepUnchanged = [
+    "face",
+    "facial features",
+    "identity",
+    "skin tone",
+    "expression",
+    "eyes",
+    "nose",
+    "mouth",
+    "ears",
+    ...(gender === "men" ? ["beard and facial hair"] : ["makeup"]),
+    "background",
+    "clothing",
+    "lighting",
+    "head pose and angle",
+    ...(isColor ? ["haircut, hair length and hairstyle"] : []),
+  ];
+
   return JSON.stringify(
-    {
-      task: "change_hairstyle_only",
-      target_hairstyle: {
-        name,
-        description: details,
-        style: "modern men's barbershop haircut",
-      },
-      keep_unchanged: [
-        "face",
-        "facial features",
-        "identity",
-        "skin tone",
-        "expression",
-        "eyes",
-        "nose",
-        "mouth",
-        "ears",
-        "beard and facial hair",
-        "background",
-        "clothing",
-        "lighting",
-        "head pose and angle",
-      ],
-      requirements: [
-        "Only modify the hair on the head",
-        "Keep the exact same person and face — do not change identity",
-        "Photorealistic with a natural hairline and realistic hair texture",
-        "Clean, professional modern barbershop result",
-      ],
-      instruction: `Edit ONLY the hairstyle of the man in this photo to a ${name}. Do not change his face, identity, skin, beard or the background — change the hair only.`,
-    },
+    isColor
+      ? {
+          task: "change_hair_color_only",
+          target_hair_color: {
+            name: style.name,
+            description: style.details,
+            style: `modern ${venue} colour service`,
+          },
+          keep_unchanged: keepUnchanged,
+          requirements: [
+            "Only modify the colour of the hair",
+            "Keep the exact same haircut, length, parting and styling",
+            "Keep the exact same person and face — do not change identity",
+            "Photorealistic with natural shine and realistic colour depth",
+          ],
+          instruction: `Recolour ONLY the hair of the ${noun} in this photo to ${style.name}. Do not change ${possessive} haircut, face, identity, skin or the background — change the hair colour only.`,
+        }
+      : {
+          task: "change_hairstyle_only",
+          target_hairstyle: {
+            name: style.name,
+            description: style.details,
+            style: `modern ${gender === "men" ? "men's" : "women's"} ${venue} hairstyle`,
+          },
+          keep_unchanged: keepUnchanged,
+          requirements: [
+            "Only modify the hair on the head",
+            "Keep the exact same person and face — do not change identity",
+            "Photorealistic with a natural hairline and realistic hair texture",
+            `Clean, professional modern ${venue} result`,
+          ],
+          instruction: `Edit ONLY the hairstyle of the ${noun} in this photo to a ${style.name}. Do not change ${possessive} face, identity, skin${
+            gender === "men" ? ", beard" : ""
+          } or the background — change the hair only.`,
+        },
     null,
     2
   );

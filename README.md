@@ -15,10 +15,13 @@ npm run dev
 
 - **Vorher/Nachher-Template** (1080 × 1680 px, TikTok-Format) aus zwei Bildern
 - **Verschieben & Zoomen** jedes Bildes direkt in der Live-Vorschau; beim Rauszoomen entsteht ein unscharfer Blur-Hintergrund
+- **Männer- & Frauen-Bibliothek** – ein Umschalter (💈 Men / 💇‍♀️ Women) steuert Template 1, 2 und 3 gleichzeitig
+  - Männer (33 Styles): Trend 2026, Fades & Classic, Afro-Textured / Curly
+  - Frauen (83 Styles): Trend 2026, Bobs & Lobs, Long & Layered, Curly & Coily, Short & Pixie, Braids & Updos sowie Color & Balayage (mit ◐ markiert)
+  - Farb-Styles nutzen einen eigenen Prompt: nur die Haarfarbe ändert sich, Schnitt und Länge bleiben
 - **Prompt-Bibliothek** zum Kopieren (JSON) für Lumina (GPT Image 2):
-  - Trend-Frisuren (Fades, Modern, Afro-Textured)
-  - Bart- & Schnauzer-Styles (inkl. gezwirbelter Moustaches)
-  - Jeder Prompt ändert gezielt nur Haare bzw. nur den Bart – Gesicht/Identität bleiben
+  - Bart- & Schnauzer-Styles (inkl. gezwirbelter Moustaches) – nur bei „Men"
+  - Jeder Prompt ändert gezielt nur Haare, Farbe bzw. Bart – Gesicht/Identität bleiben
 - Sprache, Labels, Akzentfarbe und Branding anpassbar
 - Export in 2× Auflösung für scharfe Ergebnisse
 

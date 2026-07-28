@@ -21,8 +21,21 @@ import {
   saveImages,
 } from "./blueprint";
 import type { ImageTransform } from "./blueprint";
-import { DEFAULT_TEXTS, HAIRCUT_GROUPS } from "./constants";
-import type { BlueprintConfig, Language } from "./types";
+import {
+  DEFAULT_TEXTS,
+  GENDERS,
+  HAIRCUT_GROUPS_BY_GENDER,
+  SUBJECT,
+  allStyles,
+  findStyle,
+} from "./constants";
+import type {
+  BlueprintConfig,
+  Gender,
+  HairStyle,
+  HairstyleGroup,
+  Language,
+} from "./types";
 import LegacyStudio from "./LegacyStudio";
 
 type Mode = "t1" | "t2" | "t3";
@@ -35,18 +48,28 @@ interface Job {
 
 const STUDIO_ROUTE = "#studio";
 const STUDIO_PASSWORD = "!Yarak123";
-
-const ALL_STYLES = HAIRCUT_GROUPS.flatMap((g) => g.cuts);
+const GENDER_STORAGE_KEY = "cutg_gender";
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
 
-function gptPrompt(name: string, details: string): string {
-  return `Give this person a ${name} haircut. ${details}. Change only the hair — keep the exact same face, identity, skin tone, expression and background. Photorealistic, natural salon result.`;
+/** Frontal-Prompt: Schnitt ODER Farbe, passend zur Zielgruppe */
+function gptPrompt(style: HairStyle, gender: Gender): string {
+  const { noun, possessive, venue } = SUBJECT[gender];
+  if (style.kind === "color") {
+    return `Recolour the hair of this ${noun} to ${style.name}. ${style.details}. Keep ${possessive} exact haircut, hair length and styling — change only the hair colour. Keep the exact same face, identity, skin tone, expression and background. Photorealistic, natural ${venue} colour result.`;
+  }
+  return `Give this ${noun} a ${style.name} hairstyle. ${style.details}. Change only the hair — keep the exact same face, identity, skin tone, expression and background. Photorealistic, natural ${venue} result.`;
 }
 
-function gptBackPrompt(name: string, details: string): string {
-  return `Show this exact same person from directly behind, so we see the back of their head and the back of a fresh ${name} haircut. ${details}. Keep the same person, hair color, skin tone, clothing and background — only the viewpoint changes to a back view. Photorealistic barbershop result photo.`;
+/** Rückansicht-Prompt für Template 3 */
+function gptBackPrompt(style: HairStyle, gender: Gender): string {
+  const { noun, venue } = SUBJECT[gender];
+  const subject =
+    style.kind === "color"
+      ? `hair coloured in ${style.name}`
+      : `fresh ${style.name} hairstyle`;
+  return `Show this exact same ${noun} from directly behind, so we see the back of the head and the back of a ${subject}. ${style.details}. Keep the same person, skin tone, clothing and background — only the viewpoint changes to a back view. Photorealistic ${venue} result photo.`;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -97,6 +120,7 @@ async function sbRpc(fn: string, body: Record<string, unknown>): Promise<unknown
 interface ActiveJob {
   id: string;
   mode: Mode;
+  gender: Gender;
   styles: string[];
 }
 interface JobState {
@@ -136,6 +160,9 @@ interface EditorHandle {
 
 function MainApp() {
   const [mode, setMode] = useState<Mode>("t1");
+  const [gender, setGender] = useState<Gender>(
+    () => (localStorage.getItem(GENDER_STORAGE_KEY) as Gender) ?? "men"
+  );
   const [brandName, setBrandName] = useState("CutG");
   const [showBranding, setShowBranding] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,11 +200,25 @@ function MainApp() {
         const job = JSON.parse(raw) as ActiveJob;
         setActiveJob(job);
         setMode(job.mode); // zurück auf den Tab des laufenden Auftrags
+        if (job.gender) setGender(job.gender);
       } catch {
         localStorage.removeItem(JOB_STORAGE_KEY);
       }
     }
   }, []);
+
+  const groups = HAIRCUT_GROUPS_BY_GENDER[gender];
+  const styleCount = useMemo(() => allStyles(gender).length, [gender]);
+
+  /** Zielgruppe wechseln: Auswahl zurücksetzen, da die Style-Namen andere sind */
+  const changeGender = (next: Gender) => {
+    if (next === gender) return;
+    setGender(next);
+    localStorage.setItem(GENDER_STORAGE_KEY, next);
+    setT1((prev) => prev.map((i) => ({ ...i, style: "" })));
+    setT2Styles([]);
+    setT3Styles([]);
+  };
 
   const config: BlueprintConfig = useMemo(
     () => ({
@@ -244,7 +285,7 @@ function MainApp() {
       const body: Record<string, unknown> = { p_items: items };
       if (sharedImage) body.p_shared_image = sharedImage;
       const jobId = (await sbRpc("mkt_create_job", body)) as string;
-      const job: ActiveJob = { id: jobId, mode: m, styles };
+      const job: ActiveJob = { id: jobId, mode: m, gender, styles };
       localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(job));
       setActiveJob(job);
     } catch (e) {
@@ -366,12 +407,12 @@ function MainApp() {
   const runT1 = () => {
     if (!t1Ready) return;
     const items = t1.map((it, i) => {
-      const s = ALL_STYLES.find((x) => x.name === it.style)!;
+      const s = findStyle(gender, it.style)!;
       return {
         idx: i,
         image: imageToApiDataUrl(it.img),
         style: it.style,
-        prompt: gptPrompt(s.name, s.details),
+        prompt: gptPrompt(s, gender),
         size: "1024x1536",
       };
     });
@@ -407,11 +448,11 @@ function MainApp() {
     const img = imageToApiDataUrl(t2.img);
     // Bild NICHT pro Element mitschicken – einmal als sharedImage (kleiner Upload)
     const items = t2Styles.map((name, i) => {
-      const s = ALL_STYLES.find((x) => x.name === name)!;
+      const s = findStyle(gender, name)!;
       return {
         idx: i,
         style: name,
-        prompt: gptPrompt(s.name, s.details),
+        prompt: gptPrompt(s, gender),
         // erstes Bild = Vorher/Nachher-Template (hochkant), die anderen = 1:1
         size: i === 0 ? "1024x1536" : "1024x1024",
       };
@@ -446,17 +487,17 @@ function MainApp() {
     const items: Record<string, unknown>[] = [];
     const styles: string[] = [];
     t3Styles.forEach((name, i) => {
-      const s = ALL_STYLES.find((x) => x.name === name)!;
+      const s = findStyle(gender, name)!;
       items.push({
         idx: i * 2,
         style: `${name} · Front`,
-        prompt: gptPrompt(s.name, s.details),
+        prompt: gptPrompt(s, gender),
         size: "1024x1536",
       });
       items.push({
         idx: i * 2 + 1,
         style: `${name} · Back`,
-        prompt: gptBackPrompt(s.name, s.details),
+        prompt: gptBackPrompt(s, gender),
         size: "1024x1536",
       });
       styles.push(`${name} · Front`, `${name} · Back`);
@@ -490,6 +531,8 @@ function MainApp() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-8 px-6 py-8">
+        <GenderSwitch value={gender} onChange={changeGender} styleCount={styleCount} />
+
         <div className="flex gap-2">
           <button
             type="button"
@@ -585,7 +628,7 @@ function MainApp() {
                       onChange={(e) => setT1Style(item.id, e.target.value)}
                     >
                       <option value="">Choose hairstyle…</option>
-                      {HAIRCUT_GROUPS.map((g) => (
+                      {groups.map((g) => (
                         <optgroup key={g.group} label={g.group}>
                           {g.cuts.map((c) => (
                             <option key={c.name} value={c.name}>
@@ -726,31 +769,13 @@ function MainApp() {
               <p className="mt-2 text-sm text-ink-muted">
                 First style → editable before/after template · the rest → single after images.
               </p>
-              <div className="mt-4 max-h-72 space-y-4 overflow-y-auto pr-1">
-                {HAIRCUT_GROUPS.map((group) => (
-                  <div key={group.group}>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                      {group.group}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {group.cuts.map((cut) => {
-                        const idx = t2Styles.indexOf(cut.name);
-                        return (
-                          <button
-                            key={cut.name}
-                            type="button"
-                            title={cut.details}
-                            onClick={() => toggleT2Style(cut.name)}
-                            className={`chip ${idx >= 0 ? "chip-active" : ""}`}
-                          >
-                            {idx >= 0 ? `${idx + 1} · ${cut.name}` : cut.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <StylePicker
+                groups={groups}
+                gender={gender}
+                selected={t2Styles}
+                onToggle={toggleT2Style}
+                onClear={() => setT2Styles([])}
+              />
             </div>
 
             {jobs.length > 0 && <ProgressTracker jobs={jobs} />}
@@ -866,31 +891,13 @@ function MainApp() {
                 Each style → <strong>one</strong> template: front view on top, back view
                 below (two generations per style).
               </p>
-              <div className="mt-4 max-h-72 space-y-4 overflow-y-auto pr-1">
-                {HAIRCUT_GROUPS.map((group) => (
-                  <div key={group.group}>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                      {group.group}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {group.cuts.map((cut) => {
-                        const idx = t3Styles.indexOf(cut.name);
-                        return (
-                          <button
-                            key={cut.name}
-                            type="button"
-                            title={cut.details}
-                            onClick={() => toggleT3Style(cut.name)}
-                            className={`chip ${idx >= 0 ? "chip-active" : ""}`}
-                          >
-                            {idx >= 0 ? `${idx + 1} · ${cut.name}` : cut.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <StylePicker
+                groups={groups}
+                gender={gender}
+                selected={t3Styles}
+                onToggle={toggleT3Style}
+                onClear={() => setT3Styles([])}
+              />
             </div>
 
             {jobs.length > 0 && <ProgressTracker jobs={jobs} />}
@@ -981,6 +988,142 @@ function MainApp() {
           </p>
         </div>
       </footer>
+    </div>
+  );
+}
+
+/** Men / Women – gilt für Template 1, 2 und 3 gleichermaßen */
+function GenderSwitch({
+  value,
+  onChange,
+  styleCount,
+}: {
+  value: Gender;
+  onChange: (g: Gender) => void;
+  styleCount: number;
+}) {
+  return (
+    <section className="panel flex flex-wrap items-center justify-between gap-4 p-4">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-widest text-ink-faint">
+          Style library
+        </p>
+        <p className="mt-1 text-sm text-ink-muted">
+          {styleCount} styles · applies to all templates
+        </p>
+      </div>
+      <div className="flex rounded-full border border-paper-border bg-paper-warm p-1">
+        {GENDERS.map((g) => (
+          <button
+            key={g.code}
+            type="button"
+            aria-pressed={value === g.code}
+            onClick={() => onChange(g.code)}
+            className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition ${
+              value === g.code
+                ? "bg-ink text-white shadow-chill"
+                : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            <span aria-hidden>{g.icon}</span>
+            {g.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Style-Auswahl mit Suche, Gruppen und Zähler (Template 2 & 3) */
+function StylePicker({
+  groups,
+  gender,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  groups: HairstyleGroup[];
+  gender: Gender;
+  selected: string[];
+  onToggle: (name: string) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState("");
+
+  // Suche zurücksetzen, wenn die Zielgruppe wechselt
+  useEffect(() => setQuery(""), [gender]);
+
+  const q = query.trim().toLowerCase();
+  const visible = useMemo(
+    () =>
+      groups
+        .map((g) => ({
+          ...g,
+          cuts: q
+            ? g.cuts.filter(
+                (c) =>
+                  c.name.toLowerCase().includes(q) ||
+                  c.details.toLowerCase().includes(q) ||
+                  g.group.toLowerCase().includes(q)
+              )
+            : g.cuts,
+        }))
+        .filter((g) => g.cuts.length > 0),
+    [groups, q]
+  );
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center gap-3">
+        <input
+          className="input-field flex-1 py-2.5"
+          placeholder="Search styles…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {selected.length > 0 && (
+          <button
+            type="button"
+            className="shrink-0 text-xs text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+            onClick={onClear}
+          >
+            clear ({selected.length})
+          </button>
+        )}
+      </div>
+
+      <div className="scroll-box mt-3 max-h-80 space-y-4 p-3">
+        {visible.length === 0 ? (
+          <p className="py-6 text-center text-sm text-ink-faint">
+            No style matches “{query}”.
+          </p>
+        ) : (
+          visible.map((group) => (
+            <div key={group.group}>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                {group.group}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {group.cuts.map((cut) => {
+                  const idx = selected.indexOf(cut.name);
+                  return (
+                    <button
+                      key={cut.name}
+                      type="button"
+                      title={cut.details}
+                      onClick={() => onToggle(cut.name)}
+                      className={`chip ${idx >= 0 ? "chip-active" : ""}`}
+                    >
+                      {cut.kind === "color" && <span aria-hidden>◐ </span>}
+                      {idx >= 0 ? `${idx + 1} · ${cut.name}` : cut.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

@@ -1,5 +1,22 @@
 export type Language = "de" | "en" | "fr" | "es" | "it";
 
+/** Zielgruppe der Style-Bibliothek */
+export type Gender = "men" | "women";
+
+/** "cut" = Schnitt/Styling (Default), "color" = reine Farbveränderung */
+export type StyleKind = "cut" | "color";
+
+export interface HairStyle {
+  name: string;
+  details: string;
+  kind?: StyleKind;
+}
+
+export interface HairstyleGroup {
+  group: string;
+  cuts: HairStyle[];
+}
+
 export interface BlueprintTexts {
   beforeLabel: string;
   afterLabel: string;
