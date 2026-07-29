@@ -17,8 +17,8 @@ import {
   drawBlueprint,
   ensureFonts,
   loadImage,
-  saveImage,
-  saveImages,
+  saveImage as saveImageRaw,
+  saveImages as saveImagesRaw,
 } from "./blueprint";
 import type { ImageTransform } from "./blueprint";
 import {
@@ -36,9 +36,12 @@ import type {
   HairstyleGroup,
   Language,
 } from "./types";
-import LegacyStudio from "./LegacyStudio";
+import AdminPanel from "./Admin";
+import LoginScreen from "./Login";
+import MyHistory from "./MyHistory";
+import { logEvent, rpc, signOut, useSession, type Profile } from "./session";
 
-type Mode = "t1" | "t2" | "t3";
+type Mode = "t1" | "t2";
 type Slot = "before" | "after";
 type JobStatus = "pending" | "active" | "done" | "error";
 interface Job {
@@ -46,9 +49,19 @@ interface Job {
   status: JobStatus;
 }
 
-const STUDIO_ROUTE = "#studio";
-const STUDIO_PASSWORD = "!Yarak123";
 const GENDER_STORAGE_KEY = "cutg_gender";
+
+/** Downloads landen im Verlauf – der Admin sieht, wer wie viel rausgibt. */
+function saveImage(dataUrl: string, filename: string) {
+  logEvent("download", 1, { filename });
+  saveImageRaw(dataUrl, filename);
+}
+
+function saveImages(items: { dataUrl: string; filename: string }[]) {
+  if (!items.length) return;
+  logEvent("download", items.length, { count: items.length });
+  saveImagesRaw(items);
+}
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
@@ -60,16 +73,6 @@ function gptPrompt(style: HairStyle, gender: Gender): string {
     return `Recolour the hair of this ${noun} to ${style.name}. ${style.details}. Keep ${possessive} exact haircut, hair length and styling — change only the hair colour. Keep the exact same face, identity, skin tone, expression and background. Photorealistic, natural ${venue} colour result.`;
   }
   return `Give this ${noun} a ${style.name} hairstyle. ${style.details}. Change only the hair — keep the exact same face, identity, skin tone, expression and background. Photorealistic, natural ${venue} result.`;
-}
-
-/** Rückansicht-Prompt für Template 3 */
-function gptBackPrompt(style: HairStyle, gender: Gender): string {
-  const { noun, venue } = SUBJECT[gender];
-  const subject =
-    style.kind === "color"
-      ? `hair coloured in ${style.name}`
-      : `fresh ${style.name} hairstyle`;
-  return `Show this exact same ${noun} from directly behind, so we see the back of the head and the back of a ${subject}. ${style.details}. Keep the same person, skin tone, clothing and background — only the viewpoint changes to a back view. Photorealistic ${venue} result photo.`;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -95,27 +98,7 @@ function imageToApiDataUrl(img: HTMLImageElement, maxDim = 1024): string {
   return canvas.toDataURL("image/jpeg", 0.9);
 }
 
-// Supabase (HairLab) – öffentliche Werte, kein Geheimnis. Der OpenAI-Key liegt
-// nur serverseitig als Edge-Function-Secret.
-const SUPABASE_URL = "https://cchuanvedsetkwfskskf.supabase.co";
-const SUPABASE_ANON =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNjaHVhbnZlZHNldGt3ZnNrc2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzNDk2NjMsImV4cCI6MjA5NTkyNTY2M30.0YlMOTA2mgiHkLBiFcIPG-4s09O0j4BGxVlfswKdz4g";
 const JOB_STORAGE_KEY = "cutg_active_job";
-
-async function sbRpc(fn: string, body: Record<string, unknown>): Promise<unknown> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON,
-      Authorization: `Bearer ${SUPABASE_ANON}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${fn}: ${res.status} ${text}`);
-  return text ? JSON.parse(text) : null;
-}
 
 interface ActiveJob {
   id: string;
@@ -158,7 +141,7 @@ interface EditorHandle {
   getResult: () => { dataUrl: string; filename: string } | null;
 }
 
-function MainApp() {
+function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void }) {
   const [mode, setMode] = useState<Mode>("t1");
   const [gender, setGender] = useState<Gender>(
     () => (localStorage.getItem(GENDER_STORAGE_KEY) as Gender) ?? "men"
@@ -180,17 +163,8 @@ function MainApp() {
     afters: AfterResult[];
   } | null>(null);
 
-  const [t3, setT3] = useState<{ src: string; img: HTMLImageElement } | null>(null);
-  const [t3Styles, setT3Styles] = useState<string[]>([]);
-  const [t3Results, setT3Results] = useState<TemplateResult[]>([]);
-
   const idRef = useRef(0);
   const t1EditorRefs = useRef<(EditorHandle | null)[]>([]);
-  const t3EditorRefs = useRef<(EditorHandle | null)[]>([]);
-  // T3: sammelt Front/Back pro Frisur, bis beide Ansichten fertig sind
-  const t3Pairs = useRef<
-    Map<number, { name: string; front?: HTMLImageElement; back?: HTMLImageElement }>
-  >(new Map());
 
   useEffect(() => {
     ensureFonts();
@@ -217,7 +191,6 @@ function MainApp() {
     localStorage.setItem(GENDER_STORAGE_KEY, next);
     setT1((prev) => prev.map((i) => ({ ...i, style: "" })));
     setT2Styles([]);
-    setT3Styles([]);
   };
 
   const config: BlueprintConfig = useMemo(
@@ -245,6 +218,8 @@ function MainApp() {
             : "pending",
   }));
 
+  // Aufräumen heißt nur noch: lokale Ansicht leeren. Der Verlauf im Server
+  // bleibt bestehen – Clipper können nichts aus ihrer Historie entfernen.
   const clearJob = () => {
     const id = activeJob?.id;
     localStorage.removeItem(JOB_STORAGE_KEY);
@@ -252,12 +227,9 @@ function MainApp() {
     setJobStatus(null);
     setT1Results([]);
     setT2Result(null);
-    setT3Results([]);
     loadedIdx.current = new Set();
     t1EditorRefs.current = [];
-    t3EditorRefs.current = [];
-    t3Pairs.current = new Map();
-    if (id) sbRpc("mkt_delete_job", { p_job: id }).catch(() => {});
+    if (id) rpc("mkt_delete_job", { p_job: id }).catch(() => {});
   };
 
   const startJob = async (
@@ -269,10 +241,7 @@ function MainApp() {
     setError(null);
     setT1Results([]);
     setT2Result(null);
-    setT3Results([]);
     t1EditorRefs.current = [];
-    t3EditorRefs.current = [];
-    t3Pairs.current = new Map();
     loadedIdx.current = new Set();
     setJobStatus({
       id: "",
@@ -282,19 +251,20 @@ function MainApp() {
       items: styles.map((s, i) => ({ idx: i, style: s, status: "pending", error: null })),
     });
     try {
-      const body: Record<string, unknown> = { p_items: items };
+      const body: Record<string, unknown> = { p_items: items, p_mode: m, p_gender: gender };
       if (sharedImage) body.p_shared_image = sharedImage;
-      const jobId = (await sbRpc("mkt_create_job", body)) as string;
+      const jobId = await rpc<string>("mkt_create_job", body);
       const job: ActiveJob = { id: jobId, mode: m, gender, styles };
       localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(job));
       setActiveJob(job);
+      onReload(); // Verbrauchszähler im Kopf aktualisieren
     } catch (e) {
       setError(
         e instanceof Error && /load failed|networkerror|failed to fetch/i.test(e.message)
-          ? "Could not reach the server — check your connection and try again."
+          ? "Server nicht erreichbar — Verbindung prüfen und neu versuchen."
           : e instanceof Error
             ? e.message
-            : "Could not start the job"
+            : "Auftrag konnte nicht gestartet werden."
       );
       setJobStatus(null);
     }
@@ -308,9 +278,9 @@ function MainApp() {
     const tick = async () => {
       if (stop) return;
       try {
-        const data = (await sbRpc("mkt_get_job", {
+        const data = await rpc<JobState | null>("mkt_get_job", {
           p_job: activeJob.id,
-        })) as JobState | null;
+        });
         if (stop) return;
         if (!data) {
           clearJob();
@@ -339,32 +309,16 @@ function MainApp() {
         if (it.status !== "done" || loadedIdx.current.has(it.idx)) continue;
         loadedIdx.current.add(it.idx);
         try {
-          const r = (await sbRpc("mkt_get_result", {
-            p_job: activeJob.id,
-            p_idx: it.idx,
-          })) as { image: string; result: string } | null;
+          const r = await rpc<{ image: string; result: string } | null>(
+            "mkt_get_result",
+            { p_job: activeJob.id, p_idx: it.idx }
+          );
           if (!r || !r.result) continue;
           if (activeJob.mode === "t2" && it.idx > 0) {
             setT2Result((prev) => ({
               beforeAfter: prev?.beforeAfter ?? null,
               afters: [...(prev?.afters ?? []), { name: it.style, dataUrl: r.result }],
             }));
-          } else if (activeJob.mode === "t3") {
-            // Front (gerader idx) + Back (ungerader idx) → EIN Doppel-Template
-            const generated = await loadImage(r.result);
-            const pairIdx = Math.floor(it.idx / 2);
-            const baseName = it.style.replace(/ · (Front|Back)$/, "");
-            const entry = t3Pairs.current.get(pairIdx) ?? { name: baseName };
-            if (it.idx % 2 === 0) entry.front = generated;
-            else entry.back = generated;
-            t3Pairs.current.set(pairIdx, entry);
-            if (entry.front && entry.back) {
-              const { front, back } = entry;
-              setT3Results((prev) => [
-                ...prev,
-                { name: entry.name, before: front, after: back },
-              ]);
-            }
           } else {
             const before = await loadImage(r.image);
             const after = await loadImage(r.result);
@@ -460,51 +414,6 @@ function MainApp() {
     startJob("t2", items, t2Styles, img);
   };
 
-  // ---- Template 3 (Front & Back, alles Vorher/Nachher-Templates) ----
-  const setT3File = async (file: File | null) => {
-    setError(null);
-    setT3Results([]);
-    if (!file) {
-      setT3(null);
-      return;
-    }
-    const src = await readFileAsDataUrl(file);
-    const img = await loadImage(src);
-    setT3({ src, img });
-  };
-
-  const toggleT3Style = (name: string) =>
-    setT3Styles((prev) =>
-      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
-    );
-
-  const t3Ready = !!t3 && t3Styles.length > 0 && !busy;
-
-  const runT3 = () => {
-    if (!t3Ready || !t3) return;
-    const img = imageToApiDataUrl(t3.img);
-    // Pro Frisur zwei Elemente: Front + Back — alle als Hochformat-Templates
-    const items: Record<string, unknown>[] = [];
-    const styles: string[] = [];
-    t3Styles.forEach((name, i) => {
-      const s = findStyle(gender, name)!;
-      items.push({
-        idx: i * 2,
-        style: `${name} · Front`,
-        prompt: gptPrompt(s, gender),
-        size: "1024x1536",
-      });
-      items.push({
-        idx: i * 2 + 1,
-        style: `${name} · Back`,
-        prompt: gptBackPrompt(s, gender),
-        size: "1024x1536",
-      });
-      styles.push(`${name} · Front`, `${name} · Back`);
-    });
-    startJob("t3", items, styles, img);
-  };
-
   const downloadAllAfters = (results: AfterResult[]) =>
     saveImages(
       results.map((r, i) => ({
@@ -520,13 +429,13 @@ function MainApp() {
           <div className="flex items-center gap-3">
             <div className="logo-mark">✂</div>
             <div>
-              <h1 className="brand-text text-xl">CutG</h1>
-              <p className="mt-0.5 text-sm text-ink-muted">before · after · generator</p>
+              <h1 className="brand-text text-xl">CutG Studio</h1>
+              <p className="mt-0.5 text-sm text-ink-muted">
+                {CANVAS_WIDTH} × {CANVAS_HEIGHT} · 3:4
+              </p>
             </div>
           </div>
-          <span className="rounded-full border border-paper-border bg-white px-4 py-1.5 text-xs font-medium tracking-widest text-ink-muted">
-            {CANVAS_WIDTH} × {CANVAS_HEIGHT} · 3:4
-          </span>
+          <AccountBar profile={profile} />
         </div>
       </header>
 
@@ -560,20 +469,6 @@ function MainApp() {
             Template 2
             <span className="mt-0.5 block text-xs font-normal opacity-70">
               one image · many styles
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("t3")}
-            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
-              mode === "t3"
-                ? "border-ink bg-ink text-white"
-                : "border-paper-border bg-white text-ink-muted hover:border-ink hover:text-ink"
-            }`}
-          >
-            Template 3
-            <span className="mt-0.5 block text-xs font-normal opacity-70">
-              front & back · all before/after
             </span>
           </button>
         </div>
@@ -730,7 +625,7 @@ function MainApp() {
               </div>
             )}
           </section>
-        ) : mode === "t2" ? (
+        ) : (
           <section className="space-y-6">
             <div className="panel p-6">
               <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
@@ -851,127 +746,11 @@ function MainApp() {
               </div>
             )}
           </section>
-        ) : (
-          <section className="space-y-6">
-            <div className="panel p-6">
-              <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-                1 · Add one image
-              </h2>
-              <div className="mt-4">
-                {t3 ? (
-                  <div className="flex items-center gap-4">
-                    <img src={t3.src} alt="" className="h-20 w-20 rounded-lg object-cover" />
-                    <button
-                      type="button"
-                      className="text-xs text-ink-faint hover:text-ink hover:underline"
-                      onClick={() => setT3File(null)}
-                    >
-                      remove
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
-                    + Add image
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={(e) => setT3File(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                )}
-              </div>
-            </div>
-
-            <div className="panel p-6">
-              <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-                2 · Pick hairstyles ({t3Styles.length} selected)
-              </h2>
-              <p className="mt-2 text-sm text-ink-muted">
-                Each style → <strong>one</strong> template: front view on top, back view
-                below (two generations per style).
-              </p>
-              <StylePicker
-                groups={groups}
-                gender={gender}
-                selected={t3Styles}
-                onToggle={toggleT3Style}
-                onClear={() => setT3Styles([])}
-              />
-            </div>
-
-            {jobs.length > 0 && <ProgressTracker jobs={jobs} />}
-            {busy && (
-              <p className="text-center text-xs text-ink-faint">
-                Runs in the background — you can close this page and come back later.
-              </p>
-            )}
-            {busy ? (
-              <button
-                type="button"
-                className="w-full rounded-full border border-red-300 bg-white py-4 text-sm font-medium uppercase tracking-widest text-red-600 transition hover:bg-red-50"
-                onClick={clearJob}
-              >
-                Cancel generation
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn-primary w-full py-4 text-sm uppercase tracking-widest"
-                disabled={!t3Ready}
-                onClick={runT3}
-              >
-                {`Generate ${t3Styles.length || 0} front/back template${
-                  t3Styles.length === 1 ? "" : "s"
-                }`}
-              </button>
-            )}
-
-            {t3Results.length > 0 && (
-              <div className="panel p-6">
-                <div className="mb-2 flex items-center justify-between">
-                  <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-                    Results ({t3Results.length})
-                  </h2>
-                  <button
-                    type="button"
-                    className="btn-secondary text-xs"
-                    onClick={() =>
-                      saveImages(
-                        t3EditorRefs.current
-                          .map((r) => r?.getResult())
-                          .filter((x): x is { dataUrl: string; filename: string } => !!x)
-                      )
-                    }
-                  >
-                    Save all
-                  </button>
-                </div>
-                <p className="mb-4 text-xs text-ink-faint">
-                  Drag inside a template to reposition · sliders to zoom.
-                </p>
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  {t3Results.map((r, i) => (
-                    <TemplateEditor
-                      key={i}
-                      ref={(el) => (t3EditorRefs.current[i] = el)}
-                      before={r.before}
-                      after={r.after}
-                      config={config}
-                      name={r.name}
-                      prefix="t3"
-                      index={i}
-                      labels={{ top: "FRONT", bottom: "BACK" }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
         )}
 
         <p className="text-center text-xs text-ink-faint">
-          Each generation is a paid GPT-Image 2 call. Faces are generated by AI.
+          Jede Generierung ist ein kostenpflichtiger GPT-Image-2-Aufruf und wird
+          deinem Account zugeordnet.
         </p>
       </main>
 
@@ -984,7 +763,7 @@ function MainApp() {
             <span className="brand-text text-sm">CutG</span>
           </div>
           <p className="text-xs text-ink-faint">
-            © {new Date().getFullYear()} CutG · runs entirely in your browser
+            © {new Date().getFullYear()} CutG · angemeldet als {profile.username}
           </p>
         </div>
       </footer>
@@ -992,7 +771,43 @@ function MainApp() {
   );
 }
 
-/** Men / Women – gilt für Template 1, 2 und 3 gleichermaßen */
+/** Nutzer-Chip im Kopf: Verbrauch, Verlauf, Admin-Link, Abmelden */
+function AccountBar({ profile }: { profile: Profile }) {
+  const limitText =
+    profile.monthly_limit === null
+      ? `${profile.used_this_month} diesen Monat`
+      : `${profile.used_this_month} / ${profile.monthly_limit} diesen Monat`;
+  const overLimit =
+    profile.monthly_limit !== null && profile.used_this_month >= profile.monthly_limit;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span
+        className={`rounded-full border px-4 py-1.5 text-xs font-medium ${
+          overLimit
+            ? "border-red-300 bg-red-50 text-red-700"
+            : "border-paper-border bg-white text-ink-muted"
+        }`}
+        title={`${profile.used_total} Generierungen insgesamt`}
+      >
+        {profile.username} · {limitText}
+      </span>
+      <a href="#verlauf" className="btn-secondary text-xs">
+        Mein Verlauf
+      </a>
+      {profile.role === "admin" && (
+        <a href="#admin" className="btn-secondary text-xs">
+          Admin
+        </a>
+      )}
+      <button type="button" className="btn-secondary text-xs" onClick={() => signOut()}>
+        Abmelden
+      </button>
+    </div>
+  );
+}
+
+/** Men / Women – gilt für beide Templates gleichermaßen */
 function GenderSwitch({
   value,
   onChange,
@@ -1382,74 +1197,101 @@ function AfterCard({ result, index }: { result: AfterResult; index: number }) {
   );
 }
 
-function PasswordGate({ children }: { children: React.ReactNode }) {
-  const [authed, setAuthed] = useState(
-    () => sessionStorage.getItem("cutg_studio") === "1"
-  );
-  const [pw, setPw] = useState("");
-  const [wrong, setWrong] = useState(false);
+const BLOCKED_TEXT = {
+  inactive: "Dein Zugang wurde gesperrt. Melde dich beim Admin.",
+  "no-profile": "Für diesen Account gibt es kein Clipper-Profil. Melde dich beim Admin.",
+  "not-admin": "Dieser Bereich ist nur für Admins.",
+} as const;
 
-  if (authed) return <>{children}</>;
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pw === STUDIO_PASSWORD) {
-      sessionStorage.setItem("cutg_studio", "1");
-      setAuthed(true);
-    } else {
-      setWrong(true);
-    }
-  };
-
+/** Eingeloggt, aber der Account darf hier nicht rein. */
+function BlockedScreen({ reason }: { reason: keyof typeof BLOCKED_TEXT }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper px-6">
-      <form onSubmit={submit} className="panel w-full max-w-sm p-6">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="logo-mark">✂</div>
-          <div>
-            <h1 className="brand-text text-lg">CutG Studio</h1>
-            <p className="text-xs text-ink-muted">private · password required</p>
-          </div>
-        </div>
-        <input
-          type="password"
-          autoFocus
-          value={pw}
-          onChange={(e) => {
-            setPw(e.target.value);
-            setWrong(false);
-          }}
-          className="input-field"
-          placeholder="Password"
-        />
-        {wrong && <p className="mt-2 text-xs text-red-600">Wrong password.</p>}
-        <button type="submit" className="btn-primary mt-4 w-full py-3">
-          Unlock
+      <div className="panel w-full max-w-sm p-6 text-center">
+        <div className="logo-mark mx-auto">✂</div>
+        <h1 className="brand-text mt-4 text-lg">CutG Studio</h1>
+        <p className="mt-2 text-sm text-ink-muted">{BLOCKED_TEXT[reason]}</p>
+        {reason === "not-admin" ? (
+          <a href="#" className="btn-primary mt-5 block w-full py-2.5 text-sm">
+            ← zum Studio
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="btn-secondary mt-5 w-full py-2.5 text-sm"
+            onClick={() => signOut()}
+          >
+            Abmelden
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Session steht, aber das Profil kam nicht durch (Netz/Server). */
+function SessionErrorScreen({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-paper px-6">
+      <div className="panel w-full max-w-sm p-6 text-center">
+        <div className="logo-mark mx-auto">✂</div>
+        <h1 className="brand-text mt-4 text-lg">CutG Studio</h1>
+        <p className="mt-2 text-sm text-ink-muted">
+          Profil konnte nicht geladen werden.
+        </p>
+        <p className="mt-1 text-xs text-red-600">{message}</p>
+        <button type="button" className="btn-primary mt-5 w-full py-2.5" onClick={onRetry}>
+          Erneut versuchen
         </button>
-        <a
-          href="#"
-          className="mt-3 block text-center text-xs text-ink-faint hover:text-ink"
+        <button
+          type="button"
+          className="mt-2 w-full text-xs text-ink-faint hover:text-ink"
+          onClick={() => signOut()}
         >
-          ← back to generator
-        </a>
-      </form>
+          Abmelden
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function App() {
   const [route, setRoute] = useState(() => window.location.hash);
+  const { loading, profile, blocked, error, reload } = useSession();
+
   useEffect(() => {
     const onHash = () => setRoute(window.location.hash);
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  if (route === STUDIO_ROUTE)
+  if (loading)
     return (
-      <PasswordGate>
-        <MainApp />
-      </PasswordGate>
+      <div className="flex min-h-screen items-center justify-center bg-paper">
+        <p className="text-sm text-ink-faint">Lädt…</p>
+      </div>
     );
-  return <LegacyStudio />;
+
+  if (!profile) {
+    if (blocked) return <BlockedScreen reason={blocked} />;
+    if (error) return <SessionErrorScreen message={error} onRetry={reload} />;
+    return <LoginScreen onSignedIn={reload} />;
+  }
+
+  if (route === "#admin")
+    return profile.role === "admin" ? (
+      <AdminPanel profile={profile} />
+    ) : (
+      <BlockedScreen reason="not-admin" />
+    );
+
+  if (route === "#verlauf") return <MyHistory profile={profile} />;
+
+  return <MainApp profile={profile} onReload={reload} />;
 }
