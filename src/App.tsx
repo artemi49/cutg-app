@@ -261,10 +261,10 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
     } catch (e) {
       setError(
         e instanceof Error && /load failed|networkerror|failed to fetch/i.test(e.message)
-          ? "Server nicht erreichbar — Verbindung prüfen und neu versuchen."
+          ? "Could not reach the server — check your connection and try again."
           : e instanceof Error
             ? e.message
-            : "Auftrag konnte nicht gestartet werden."
+            : "Could not start the job."
       );
       setJobStatus(null);
     }
@@ -749,8 +749,8 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
         )}
 
         <p className="text-center text-xs text-ink-faint">
-          Jede Generierung ist ein kostenpflichtiger GPT-Image-2-Aufruf und wird
-          deinem Account zugeordnet.
+          Every generation is a paid GPT-Image 2 call and is recorded against your
+          account.
         </p>
       </main>
 
@@ -763,7 +763,7 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
             <span className="brand-text text-sm">CutG</span>
           </div>
           <p className="text-xs text-ink-faint">
-            © {new Date().getFullYear()} CutG · angemeldet als {profile.username}
+            © {new Date().getFullYear()} CutG · signed in as {profile.username}
           </p>
         </div>
       </footer>
@@ -775,8 +775,8 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
 function AccountBar({ profile }: { profile: Profile }) {
   const limitText =
     profile.monthly_limit === null
-      ? `${profile.used_this_month} diesen Monat`
-      : `${profile.used_this_month} / ${profile.monthly_limit} diesen Monat`;
+      ? `${profile.used_this_month} this month`
+      : `${profile.used_this_month} / ${profile.monthly_limit} this month`;
   const overLimit =
     profile.monthly_limit !== null && profile.used_this_month >= profile.monthly_limit;
 
@@ -788,12 +788,12 @@ function AccountBar({ profile }: { profile: Profile }) {
             ? "border-red-300 bg-red-50 text-red-700"
             : "border-paper-border bg-white text-ink-muted"
         }`}
-        title={`${profile.used_total} Generierungen insgesamt`}
+        title={`${profile.used_total} generations in total`}
       >
         {profile.username} · {limitText}
       </span>
-      <a href="#verlauf" className="btn-secondary text-xs">
-        Mein Verlauf
+      <a href="#history" className="btn-secondary text-xs">
+        My history
       </a>
       {profile.role === "admin" && (
         <a href="#admin" className="btn-secondary text-xs">
@@ -801,7 +801,7 @@ function AccountBar({ profile }: { profile: Profile }) {
         </a>
       )}
       <button type="button" className="btn-secondary text-xs" onClick={() => signOut()}>
-        Abmelden
+        Sign out
       </button>
     </div>
   );
@@ -1198,9 +1198,9 @@ function AfterCard({ result, index }: { result: AfterResult; index: number }) {
 }
 
 const BLOCKED_TEXT = {
-  inactive: "Dein Zugang wurde gesperrt. Melde dich beim Admin.",
-  "no-profile": "Für diesen Account gibt es kein Clipper-Profil. Melde dich beim Admin.",
-  "not-admin": "Dieser Bereich ist nur für Admins.",
+  inactive: "Your access has been blocked. Please contact the admin.",
+  "no-profile": "There is no clipper profile for this account. Please contact the admin.",
+  "not-admin": "This area is for admins only.",
 } as const;
 
 /** Eingeloggt, aber der Account darf hier nicht rein. */
@@ -1213,7 +1213,7 @@ function BlockedScreen({ reason }: { reason: keyof typeof BLOCKED_TEXT }) {
         <p className="mt-2 text-sm text-ink-muted">{BLOCKED_TEXT[reason]}</p>
         {reason === "not-admin" ? (
           <a href="#" className="btn-primary mt-5 block w-full py-2.5 text-sm">
-            ← zum Studio
+            ← back to the studio
           </a>
         ) : (
           <button
@@ -1221,7 +1221,7 @@ function BlockedScreen({ reason }: { reason: keyof typeof BLOCKED_TEXT }) {
             className="btn-secondary mt-5 w-full py-2.5 text-sm"
             onClick={() => signOut()}
           >
-            Abmelden
+            Sign out
           </button>
         )}
       </div>
@@ -1242,19 +1242,17 @@ function SessionErrorScreen({
       <div className="panel w-full max-w-sm p-6 text-center">
         <div className="logo-mark mx-auto">✂</div>
         <h1 className="brand-text mt-4 text-lg">CutG Studio</h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          Profil konnte nicht geladen werden.
-        </p>
+        <p className="mt-2 text-sm text-ink-muted">Could not load your profile.</p>
         <p className="mt-1 text-xs text-red-600">{message}</p>
         <button type="button" className="btn-primary mt-5 w-full py-2.5" onClick={onRetry}>
-          Erneut versuchen
+          Try again
         </button>
         <button
           type="button"
           className="mt-2 w-full text-xs text-ink-faint hover:text-ink"
           onClick={() => signOut()}
         >
-          Abmelden
+          Sign out
         </button>
       </div>
     </div>
@@ -1274,7 +1272,7 @@ export default function App() {
   if (loading)
     return (
       <div className="flex min-h-screen items-center justify-center bg-paper">
-        <p className="text-sm text-ink-faint">Lädt…</p>
+        <p className="text-sm text-ink-faint">Loading…</p>
       </div>
     );
 
@@ -1291,7 +1289,7 @@ export default function App() {
       <BlockedScreen reason="not-admin" />
     );
 
-  if (route === "#verlauf") return <MyHistory profile={profile} />;
+  if (route === "#history") return <MyHistory profile={profile} />;
 
   return <MainApp profile={profile} onReload={reload} />;
 }
