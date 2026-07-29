@@ -77,7 +77,7 @@ export async function signIn(username: string, password: string): Promise<void> 
   if (error) {
     throw new Error(
       /invalid login credentials/i.test(error.message)
-        ? "Benutzername oder Passwort ist falsch."
+        ? "Wrong username or password."
         : error.message
     );
   }

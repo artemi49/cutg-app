@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { archiveUrl, type HistoryEntry } from "./session";
 
+/** Bewusst mit ausgeschriebenem Monat – „07/03" wäre je nach Leser mehrdeutig. */
 const fmt = (iso: string) =>
-  new Date(iso).toLocaleString("de-DE", {
+  new Date(iso).toLocaleString("en-GB", {
     day: "2-digit",
-    month: "2-digit",
+    month: "short",
     year: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
@@ -56,14 +57,14 @@ export function HistoryList({
   showUser?: boolean;
 }) {
   if (entries.length === 0)
-    return <p className="py-8 text-center text-sm text-ink-faint">Noch nichts generiert.</p>;
+    return <p className="py-8 text-center text-sm text-ink-faint">Nothing generated yet.</p>;
 
   return (
     <ul className="divide-y divide-paper-border">
       {entries.map((e) => (
         <li key={e.id} className="flex items-center gap-4 py-3">
-          <ArchiveThumb path={e.before_path} alt="Vorher" />
-          <ArchiveThumb path={e.after_path} alt="Nachher" />
+          <ArchiveThumb path={e.before_path} alt="Before" />
+          <ArchiveThumb path={e.after_path} alt="After" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-ink">{e.style}</p>
             <p className="mt-0.5 text-xs text-ink-faint">
@@ -74,7 +75,7 @@ export function HistoryList({
             </p>
             {e.status === "error" && (
               <p className="mt-0.5 truncate text-xs text-red-600" title={e.error ?? ""}>
-                Fehler: {e.error ?? "unbekannt"}
+                Error: {e.error ?? "unknown"}
               </p>
             )}
           </div>
@@ -87,7 +88,7 @@ export function HistoryList({
                   : "bg-paper-warm text-ink-muted"
             }`}
           >
-            {e.status === "done" ? "fertig" : e.status === "error" ? "Fehler" : e.status}
+            {e.status === "done" ? "done" : e.status === "error" ? "error" : e.status}
           </span>
         </li>
       ))}

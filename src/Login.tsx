@@ -31,7 +31,7 @@ export default function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) 
       logEvent("login");
       onSignedIn();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Anmeldung fehlgeschlagen.");
+      setError(err instanceof Error ? err.message : "Sign-in failed.");
     } finally {
       setBusy(false);
     }
@@ -45,26 +45,26 @@ export default function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) 
           <div>
             <h1 className="brand-text text-lg">CutG Studio</h1>
             <p className="text-xs text-ink-muted">
-              {setupOpen ? "Ersteinrichtung" : "Anmeldung für Clipper"}
+              {setupOpen ? "First-time setup" : "Sign in"}
             </p>
           </div>
         </div>
 
         {setupOpen && (
           <label className="mb-3 block">
-            <span className="text-xs text-ink-faint">Setup-Code</span>
+            <span className="text-xs text-ink-faint">Setup code</span>
             <input
               className="input-field mt-1"
               value={setupCode}
               onChange={(e) => setSetupCode(e.target.value)}
-              placeholder="vom Admin erhalten"
+              placeholder="from your admin"
               autoCapitalize="characters"
             />
           </label>
         )}
 
         <label className="block">
-          <span className="text-xs text-ink-faint">Benutzername</span>
+          <span className="text-xs text-ink-faint">Username</span>
           <input
             className="input-field mt-1"
             autoFocus
@@ -72,12 +72,12 @@ export default function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) 
             autoCorrect="off"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="z.B. marco"
+            placeholder="e.g. marco"
           />
         </label>
 
         <label className="mt-3 block">
-          <span className="text-xs text-ink-faint">Passwort</span>
+          <span className="text-xs text-ink-faint">Password</span>
           <input
             className="input-field mt-1"
             type="password"
@@ -93,7 +93,7 @@ export default function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) 
           className="btn-primary mt-5 w-full py-3"
           disabled={busy || !username || !password}
         >
-          {busy ? "Moment…" : setupOpen ? "Admin anlegen & anmelden" : "Anmelden"}
+          {busy ? "One moment…" : setupOpen ? "Create admin & sign in" : "Sign in"}
         </button>
 
         <button
@@ -104,11 +104,11 @@ export default function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) 
             setError(null);
           }}
         >
-          {setupOpen ? "← zurück zur Anmeldung" : "Ersteinrichtung mit Setup-Code"}
+          {setupOpen ? "← back to sign in" : "First-time setup with a setup code"}
         </button>
 
         <p className="mt-4 text-center text-xs text-ink-faint">
-          Kein Zugang? Der Admin legt die Accounts an.
+          No access? Your admin creates the accounts.
         </p>
       </form>
     </div>

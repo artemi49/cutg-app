@@ -36,7 +36,7 @@ function checkUsername(raw: unknown): string {
   const username = String(raw ?? "").trim().toLowerCase();
   if (!USERNAME_RE.test(username)) {
     throw new Error(
-      "Benutzername: 3–24 Zeichen, nur a–z, 0–9, Punkt, Minus, Unterstrich.",
+      "Username: 3–24 characters, only a–z, 0–9, dot, dash, underscore.",
     );
   }
   return username;
@@ -44,8 +44,8 @@ function checkUsername(raw: unknown): string {
 
 function checkPassword(raw: unknown): string {
   const password = String(raw ?? "");
-  if (password.length < 8) throw new Error("Passwort muss mindestens 8 Zeichen haben.");
-  if (password.length > 72) throw new Error("Passwort darf höchstens 72 Zeichen haben.");
+  if (password.length < 8) throw new Error("Password must be at least 8 characters.");
+  if (password.length > 72) throw new Error("Password must be at most 72 characters.");
   return password;
 }
 
@@ -64,7 +64,7 @@ async function callerProfile(req: Request) {
 
 async function requireAdmin(req: Request) {
   const me = await callerProfile(req);
-  if (!me || me.role !== "admin" || !me.active) throw new Error("Nur für Admins.");
+  if (!me || me.role !== "admin" || !me.active) throw new Error("Admins only.");
   return me;
 }
 
@@ -81,7 +81,7 @@ async function createAccount(opts: {
   const { data: taken } = await admin.rpc("mkt_srv_username_taken", {
     p_username: opts.username,
   });
-  if (taken) throw new Error(`Benutzername „${opts.username}“ ist schon vergeben.`);
+  if (taken) throw new Error(`Username “${opts.username}” is already taken.`);
 
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email: emailFor(opts.username),
@@ -90,7 +90,7 @@ async function createAccount(opts: {
     user_metadata: { username: opts.username, kind: "clipper" },
   });
   if (createErr || !created?.user) {
-    throw new Error(createErr?.message ?? "Account konnte nicht angelegt werden.");
+    throw new Error(createErr?.message ?? "Could not create the account.");
   }
 
   const { error: regErr } = await admin.rpc("mkt_srv_register", {
@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
         const { data: ok } = await admin.rpc("mkt_srv_bootstrap_ok", {
           p_code: String(body.setup_code ?? ""),
         });
-        if (!ok) throw new Error("Setup-Code ungültig oder bereits verbraucht.");
+        if (!ok) throw new Error("Setup code is invalid or already used.");
 
         const userId = await createAccount({
           username,
@@ -166,14 +166,14 @@ Deno.serve(async (req) => {
         await requireAdmin(req);
         const password = checkPassword(body.password);
         const userId = String(body.user_id ?? "");
-        if (!userId) throw new Error("user_id fehlt.");
+        if (!userId) throw new Error("user_id is missing.");
         const { error } = await admin.auth.admin.updateUserById(userId, { password });
         if (error) throw new Error(error.message);
         return json(200, { ok: true });
       }
 
       default:
-        return json(400, { error: `Unbekannte Aktion: ${action || "(leer)"}` });
+        return json(400, { error: `Unknown action: ${action || "(empty)"}` });
     }
   } catch (e) {
     return json(400, { error: e instanceof Error ? e.message : String(e) });

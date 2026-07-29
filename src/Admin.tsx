@@ -9,7 +9,7 @@ import {
   type Profile,
 } from "./session";
 
-type Tab = "clipper" | "verlauf" | "aktivitaet";
+type Tab = "clippers" | "history" | "activity";
 
 interface EventRow {
   id: number;
@@ -22,9 +22,9 @@ interface EventRow {
 
 const fmtDate = (iso: string | null) =>
   iso
-    ? new Date(iso).toLocaleString("de-DE", {
+    ? new Date(iso).toLocaleString("en-GB", {
         day: "2-digit",
-        month: "2-digit",
+        month: "short",
         year: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
@@ -40,7 +40,7 @@ function suggestPassword(): string {
 }
 
 export default function AdminPanel({ profile }: { profile: Profile }) {
-  const [tab, setTab] = useState<Tab>("clipper");
+  const [tab, setTab] = useState<Tab>("clippers");
   const [clippers, setClippers] = useState<ClipperRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,33 +79,31 @@ export default function AdminPanel({ profile }: { profile: Profile }) {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="brand-text text-xl">Admin · CutG Studio</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            angemeldet als {profile.username}
-          </p>
+          <p className="mt-1 text-sm text-ink-muted">signed in as {profile.username}</p>
         </div>
         <div className="flex gap-2">
           <a href="#" className="btn-secondary text-xs">
             ← Studio
           </a>
           <button type="button" className="btn-secondary text-xs" onClick={() => signOut()}>
-            Abmelden
+            Sign out
           </button>
         </div>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Generierungen gesamt" value={totals.total} />
-        <StatCard label="Diesen Monat" value={totals.month} />
-        <StatCard label="Letzte 7 Tage" value={totals.week} />
-        <StatCard label="Aktive Clipper" value={totals.active} />
+        <StatCard label="Generations total" value={totals.total} />
+        <StatCard label="This month" value={totals.month} />
+        <StatCard label="Last 7 days" value={totals.week} />
+        <StatCard label="Active clippers" value={totals.active} />
       </div>
 
       <div className="mb-6 flex gap-2">
         {(
           [
-            ["clipper", "Clipper & Verbrauch"],
-            ["verlauf", "Verlauf"],
-            ["aktivitaet", "Aktivität"],
+            ["clippers", "Clippers & usage"],
+            ["history", "History"],
+            ["activity", "Activity"],
           ] as [Tab, string][]
         ).map(([id, label]) => (
           <button
@@ -129,7 +127,7 @@ export default function AdminPanel({ profile }: { profile: Profile }) {
         </div>
       )}
 
-      {tab === "clipper" && (
+      {tab === "clippers" && (
         <ClipperTab
           clippers={clippers}
           loading={loading}
@@ -138,8 +136,8 @@ export default function AdminPanel({ profile }: { profile: Profile }) {
           onError={setError}
         />
       )}
-      {tab === "verlauf" && <HistoryTab clippers={clippers} />}
-      {tab === "aktivitaet" && <EventsTab clippers={clippers} />}
+      {tab === "history" && <HistoryTab clippers={clippers} />}
+      {tab === "activity" && <EventsTab clippers={clippers} />}
     </div>
   );
 }
@@ -190,7 +188,7 @@ function ClipperTab({
 
   const changeLimit = (c: ClipperRow) => {
     const input = window.prompt(
-      `Monatslimit für „${c.username}“ (leer = kein Limit):`,
+      `Monthly limit for “${c.username}” (empty = no limit):`,
       c.monthly_limit === null ? "" : String(c.monthly_limit)
     );
     if (input === null) return;
@@ -200,7 +198,7 @@ function ClipperTab({
         rpc("mkt_admin_update_clipper", { p_user: c.user_id, p_clear_limit: true })
       );
     const n = Number(trimmed);
-    if (!Number.isFinite(n) || n < 1) return onError("Limit muss eine Zahl ab 1 sein.");
+    if (!Number.isFinite(n) || n < 1) return onError("Limit must be a number of 1 or more.");
     return guard(c.user_id, () =>
       rpc("mkt_admin_update_clipper", {
         p_user: c.user_id,
@@ -213,14 +211,14 @@ function ClipperTab({
     const pw = suggestPassword();
     if (
       !window.confirm(
-        `Neues Passwort für „${c.username}“ setzen?\n\n${pw}\n\n` +
-          "Nach OK ist das alte Passwort ungültig. Kopiere dir das neue jetzt."
+        `Set a new password for “${c.username}”?\n\n${pw}\n\n` +
+          "After OK the old password stops working. Copy the new one now."
       )
     )
       return;
     return guard(c.user_id, async () => {
       await adminCall("reset_password", { user_id: c.user_id, password: pw });
-      window.prompt(`Neues Passwort für ${c.username} — jetzt kopieren:`, pw);
+      window.prompt(`New password for ${c.username} — copy it now:`, pw);
     });
   };
 
@@ -232,28 +230,28 @@ function ClipperTab({
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="border-b border-paper-border text-xs uppercase tracking-wider text-ink-faint">
             <tr>
-              <th className="px-4 py-3">Benutzer</th>
-              <th className="px-4 py-3 text-right">Monat</th>
-              <th className="px-4 py-3 text-right">7 Tage</th>
-              <th className="px-4 py-3 text-right">Gesamt</th>
-              <th className="px-4 py-3 text-right">Fehler</th>
+              <th className="px-4 py-3">User</th>
+              <th className="px-4 py-3 text-right">Month</th>
+              <th className="px-4 py-3 text-right">7 days</th>
+              <th className="px-4 py-3 text-right">Total</th>
+              <th className="px-4 py-3 text-right">Errors</th>
               <th className="px-4 py-3 text-right">Downloads</th>
-              <th className="px-4 py-3">Zuletzt aktiv</th>
-              <th className="px-4 py-3">Aktionen</th>
+              <th className="px-4 py-3">Last active</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-paper-border">
             {loading && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-ink-faint">
-                  Lädt…
+                  Loading…
                 </td>
               </tr>
             )}
             {!loading && clippers.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-ink-faint">
-                  Noch keine Accounts angelegt.
+                  No accounts yet.
                 </td>
               </tr>
             )}
@@ -271,7 +269,7 @@ function ClipperTab({
                     )}
                     {!c.active && (
                       <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-red-700">
-                        gesperrt
+                        blocked
                       </span>
                     )}
                     {c.display_name && (
@@ -313,7 +311,7 @@ function ClipperTab({
                         disabled={busyId === c.user_id}
                         onClick={() => resetPassword(c)}
                       >
-                        Passwort
+                        Password
                       </button>
                       {c.user_id !== me.user_id && (
                         <button
@@ -322,7 +320,7 @@ function ClipperTab({
                           disabled={busyId === c.user_id}
                           onClick={() => toggleActive(c)}
                         >
-                          {c.active ? "sperren" : "entsperren"}
+                          {c.active ? "block" : "unblock"}
                         </button>
                       )}
                     </div>
@@ -376,28 +374,28 @@ function CreateAccountForm({
   };
 
   const credentials = created
-    ? `CutG Studio\n${window.location.origin}\n\nBenutzername: ${created.username}\nPasswort: ${created.password}`
+    ? `CutG Studio\n${window.location.origin}\n\nUsername: ${created.username}\nPassword: ${created.password}`
     : "";
 
   return (
     <div className="panel p-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-          Neuen Clipper anlegen
+          Create a clipper account
         </h2>
         <button
           type="button"
           className="btn-secondary text-xs"
           onClick={() => setOpen((v) => !v)}
         >
-          {open ? "schließen" : "+ Account"}
+          {open ? "close" : "+ Account"}
         </button>
       </div>
 
       {created && (
         <div className="mt-4 rounded-xl border border-paper-border bg-paper-warm p-4">
           <p className="text-xs uppercase tracking-widest text-ink-faint">
-            Zugangsdaten — jetzt weitergeben, das Passwort ist danach nicht mehr sichtbar
+            Credentials — pass them on now, the password is not shown again
           </p>
           <pre className="mt-2 whitespace-pre-wrap break-all text-sm text-ink">
             {credentials}
@@ -408,14 +406,14 @@ function CreateAccountForm({
               className="btn-secondary text-xs"
               onClick={() => navigator.clipboard?.writeText(credentials)}
             >
-              Kopieren
+              Copy
             </button>
             <button
               type="button"
               className="text-xs text-ink-faint hover:text-ink hover:underline"
               onClick={() => setCreated(null)}
             >
-              ausblenden
+              hide
             </button>
           </div>
         </div>
@@ -424,7 +422,7 @@ function CreateAccountForm({
       {open && (
         <form onSubmit={submit} className="mt-4 grid gap-3 sm:grid-cols-3">
           <label className="block">
-            <span className="text-xs text-ink-faint">Benutzername</span>
+            <span className="text-xs text-ink-faint">Username</span>
             <input
               className="input-field mt-1"
               value={username}
@@ -434,7 +432,7 @@ function CreateAccountForm({
             />
           </label>
           <label className="block">
-            <span className="text-xs text-ink-faint">Passwort</span>
+            <span className="text-xs text-ink-faint">Password</span>
             <div className="mt-1 flex gap-2">
               <input
                 className="input-field flex-1"
@@ -446,18 +444,18 @@ function CreateAccountForm({
                 className="btn-secondary shrink-0 text-xs"
                 onClick={() => setPassword(suggestPassword())}
               >
-                neu
+                new
               </button>
             </div>
           </label>
           <label className="block">
-            <span className="text-xs text-ink-faint">Monatslimit (leer = keins)</span>
+            <span className="text-xs text-ink-faint">Monthly limit (empty = none)</span>
             <input
               className="input-field mt-1"
               inputMode="numeric"
               value={limit}
               onChange={(e) => setLimit(e.target.value)}
-              placeholder="z.B. 200"
+              placeholder="e.g. 200"
             />
           </label>
           <div className="sm:col-span-3">
@@ -466,7 +464,7 @@ function CreateAccountForm({
               className="btn-primary w-full py-3 text-sm"
               disabled={busy || username.trim().length < 3 || password.length < 8}
             >
-              {busy ? "Legt an…" : "Account anlegen"}
+              {busy ? "Creating…" : "Create account"}
             </button>
           </div>
         </form>
@@ -492,7 +490,7 @@ function ClipperFilter({
       value={value}
       onChange={(e) => onChange(e.target.value)}
     >
-      <option value="">Alle Clipper</option>
+      <option value="">All clippers</option>
       {clippers.map((c) => (
         <option key={c.user_id} value={c.user_id}>
           {c.username}
@@ -523,13 +521,13 @@ function HistoryTab({ clippers }: { clippers: ClipperRow[] }) {
       <div className="flex flex-wrap items-center gap-3">
         <ClipperFilter clippers={clippers} value={user} onChange={setUser} />
         <span className="text-xs text-ink-faint">
-          Vollständiger Verlauf — Clipper können hier nichts entfernen.
+          Complete history — clippers cannot remove anything here.
         </span>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="panel px-6 py-2">
         {entries === null && !error ? (
-          <p className="py-8 text-center text-sm text-ink-faint">Lädt…</p>
+          <p className="py-8 text-center text-sm text-ink-faint">Loading…</p>
         ) : (
           <HistoryList entries={entries ?? []} showUser />
         )}
@@ -540,7 +538,7 @@ function HistoryTab({ clippers }: { clippers: ClipperRow[] }) {
           className="btn-secondary w-full py-2.5 text-xs"
           onClick={() => setLimit((l) => Math.min(300, l + 60))}
         >
-          Mehr laden
+          Load more
         </button>
       )}
     </div>
@@ -567,9 +565,9 @@ function EventsTab({ clippers }: { clippers: ClipperRow[] }) {
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="panel px-6 py-2">
         {events === null && !error ? (
-          <p className="py-8 text-center text-sm text-ink-faint">Lädt…</p>
+          <p className="py-8 text-center text-sm text-ink-faint">Loading…</p>
         ) : events && events.length === 0 ? (
-          <p className="py-8 text-center text-sm text-ink-faint">Nichts protokolliert.</p>
+          <p className="py-8 text-center text-sm text-ink-faint">Nothing logged yet.</p>
         ) : (
           <ul className="divide-y divide-paper-border">
             {(events ?? []).map((e) => (
@@ -577,8 +575,8 @@ function EventsTab({ clippers }: { clippers: ClipperRow[] }) {
                 <div className="min-w-0">
                   <p className="text-sm text-ink">
                     {e.kind === "download"
-                      ? `${e.amount} Template${e.amount === 1 ? "" : "s"} heruntergeladen`
-                      : "Anmeldung"}
+                      ? `Downloaded ${e.amount} template${e.amount === 1 ? "" : "s"}`
+                      : "Signed in"}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-ink-faint">
                     {typeof e.meta?.filename === "string" ? e.meta.filename : ""}

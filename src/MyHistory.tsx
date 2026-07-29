@@ -20,15 +20,15 @@ export default function MyHistory({ profile }: { profile: Profile }) {
     <div className="mx-auto min-h-screen w-full max-w-3xl px-6 py-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="brand-text text-xl">Mein Verlauf</h1>
+          <h1 className="brand-text text-xl">My history</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            {profile.used_total} Generierungen insgesamt · {profile.used_this_month}{" "}
-            diesen Monat
-            {profile.monthly_limit !== null && ` (Limit ${profile.monthly_limit})`}
+            {profile.used_total} generations in total · {profile.used_this_month} this
+            month
+            {profile.monthly_limit !== null && ` (limit ${profile.monthly_limit})`}
           </p>
         </div>
         <a href="#" className="btn-secondary text-xs">
-          ← zurück zum Studio
+          ← back to the studio
         </a>
       </div>
 
@@ -36,7 +36,7 @@ export default function MyHistory({ profile }: { profile: Profile }) {
 
       <div className="panel px-6 py-2">
         {entries === null && !error ? (
-          <p className="py-8 text-center text-sm text-ink-faint">Lädt…</p>
+          <p className="py-8 text-center text-sm text-ink-faint">Loading…</p>
         ) : (
           <HistoryList entries={entries ?? []} />
         )}
