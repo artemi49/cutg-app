@@ -39,9 +39,11 @@ import type {
 import AdminPanel from "./Admin";
 import LoginScreen from "./Login";
 import MyHistory from "./MyHistory";
+import VideoTemplate from "./VideoTemplate";
+import VideoTemplate4 from "./VideoTemplate4";
 import { logEvent, rpc, signOut, useSession, type Profile } from "./session";
 
-type Mode = "t1" | "t2";
+type Mode = "t1" | "t2" | "t3" | "t4";
 type Slot = "before" | "after";
 type JobStatus = "pending" | "active" | "done" | "error";
 interface Job {
@@ -442,7 +444,7 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-8 px-6 py-8">
         <GenderSwitch value={gender} onChange={changeGender} styleCount={styleCount} />
 
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <button
             type="button"
             onClick={() => setMode("t1")}
@@ -469,6 +471,34 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
             Template 2
             <span className="mt-0.5 block text-xs font-normal opacity-70">
               one image · many styles
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("t3")}
+            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+              mode === "t3"
+                ? "border-ink bg-ink text-white"
+                : "border-paper-border bg-white text-ink-muted hover:border-ink hover:text-ink"
+            }`}
+          >
+            Template 3
+            <span className="mt-0.5 block text-xs font-normal opacity-70">
+              recommendation video · no AI
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("t4")}
+            className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+              mode === "t4"
+                ? "border-ink bg-ink text-white"
+                : "border-paper-border bg-white text-ink-muted hover:border-ink hover:text-ink"
+            }`}
+          >
+            Template 4
+            <span className="mt-0.5 block text-xs font-normal opacity-70">
+              report scroll video · no AI
             </span>
           </button>
         </div>
@@ -625,7 +655,7 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
               </div>
             )}
           </section>
-        ) : (
+        ) : mode === "t2" ? (
           <section className="space-y-6">
             <div className="panel p-6">
               <h2 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
@@ -746,6 +776,20 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
               </div>
             )}
           </section>
+        ) : mode === "t3" ? (
+          <VideoTemplate
+            gender={gender}
+            groups={groups}
+            brandName={brandName}
+            showBranding={showBranding}
+          />
+        ) : (
+          <VideoTemplate4
+            gender={gender}
+            groups={groups}
+            brandName={brandName}
+            showBranding={showBranding}
+          />
         )}
 
         <p className="text-center text-xs text-ink-faint">
