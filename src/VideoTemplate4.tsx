@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { ensureFonts, loadImage } from "./blueprint";
+import { ensureFonts, loadImage, saveImage } from "./blueprint";
 import { SUBJECT } from "./constants";
+import { PASTE_SHORTCUT, usePasteImages } from "./paste";
 import { logEvent, rpc } from "./session";
 import { recordCanvasVideo, saveVideoBlob } from "./video";
 import type { Gender, HairStyle, HairstyleGroup } from "./types";
@@ -771,6 +772,23 @@ export default function VideoTemplate4({
     setter({ src, img });
   };
 
+  // Cmd/Ctrl+V füllt die leeren Slots der Reihe nach: erst Vorher, dann Nachher
+  usePasteImages((files) => {
+    const queue = [...files];
+    if (!before && queue.length) setFile("before", queue.shift()!);
+    if (!after && !generating && queue.length) setFile("after", queue.shift()!);
+  });
+
+  /** Nachher-Bild einzeln sichern – wird wie jeder Download protokolliert. */
+  const saveAfter = () => {
+    if (!after) return;
+    const type = /^data:image\/(\w+)/.exec(after.src)?.[1] ?? "png";
+    const ext = type === "jpeg" ? "jpg" : type;
+    const filename = `cutg-after-${(styleName || "image").replace(/\s+/g, "-").toLowerCase()}.${ext}`;
+    logEvent("download", 1, { filename, kind: "after" });
+    saveImage(after.src, filename);
+  };
+
   /** Nachher-Bild automatisch generieren (läuft über die normale Job-Queue). */
   const generateAfter = async () => {
     if (!before || !styleName || generating) return;
@@ -892,8 +910,11 @@ export default function VideoTemplate4({
           </button>
         </div>
       ) : (
-        <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
+        <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
           + Add image
+          <span className="mt-1 hidden text-xs font-normal text-ink-faint sm:block">
+            or paste with {PASTE_SHORTCUT}
+          </span>
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
@@ -923,6 +944,9 @@ export default function VideoTemplate4({
             {after ? (
               <div className="flex items-center gap-3">
                 <img src={after.src} alt="" className="h-20 w-20 rounded-lg object-cover" />
+                <button type="button" className="btn-secondary text-xs" onClick={saveAfter}>
+                  Save image
+                </button>
                 <button
                   type="button"
                   className="text-xs text-ink-faint hover:text-ink hover:underline"
@@ -958,6 +982,7 @@ export default function VideoTemplate4({
                 )}
                 <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-3 text-center text-xs font-medium text-ink-muted transition hover:border-ink hover:bg-white">
                   …or upload your own
+                  <span className="hidden sm:inline">&nbsp;· paste with {PASTE_SHORTCUT}</span>
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"

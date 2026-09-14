@@ -39,6 +39,7 @@ import type {
 import AdminPanel from "./Admin";
 import LoginScreen from "./Login";
 import MyHistory from "./MyHistory";
+import { PASTE_SHORTCUT, usePasteImages } from "./paste";
 import VideoTemplate from "./VideoTemplate";
 import VideoTemplate4 from "./VideoTemplate4";
 import { logEvent, rpc, signOut, useSession, type Profile } from "./session";
@@ -341,7 +342,7 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
   }, [jobStatus, activeJob]);
 
   // ---- Template 1 ----
-  const addT1Files = async (files: FileList | null) => {
+  const addT1Files = async (files: FileList | File[] | null) => {
     if (!files) return;
     setError(null);
     const room = 5 - t1.length;
@@ -423,6 +424,15 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
         filename: `cutg-after-${safeName(r.name)}-${i + 1}.png`,
       }))
     );
+
+  // Cmd/Ctrl+V: Template 1 hängt Bilder an, Template 2 füllt den leeren Slot
+  usePasteImages(
+    (files) => {
+      if (mode === "t1") addT1Files(files);
+      else if (!t2) setT2File(files[0]);
+    },
+    mode === "t1" || mode === "t2"
+  );
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -575,8 +585,11 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
               </div>
 
               {t1.length < 5 && (
-                <label className="mt-4 flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-6 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
+                <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-6 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
                   + Add image{t1.length > 0 ? "s" : ""}
+                  <span className="mt-1 hidden text-xs font-normal text-ink-faint sm:block">
+                    or paste with {PASTE_SHORTCUT}
+                  </span>
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
@@ -674,8 +687,11 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
                     </button>
                   </div>
                 ) : (
-                  <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
+                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
                     + Add image
+                    <span className="mt-1 hidden text-xs font-normal text-ink-faint sm:block">
+                      or paste with {PASTE_SHORTCUT}
+                    </span>
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
