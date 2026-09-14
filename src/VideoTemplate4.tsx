@@ -1,5 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { ensureFonts, loadImage, saveImage } from "./blueprint";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import {
+  DEFAULT_TRANSFORM,
+  MAX_SCALE,
+  MIN_SCALE,
+  drawPanel,
+  ensureFonts,
+  loadImage,
+  saveImage,
+} from "./blueprint";
+import type { ImageTransform } from "./blueprint";
 import { SUBJECT } from "./constants";
 import { PASTE_SHORTCUT, usePasteImages } from "./paste";
 import { logEvent, rpc } from "./session";
@@ -23,6 +33,9 @@ const UNBLUR_END = 3.2;
 const F = '"DM Sans", system-ui, sans-serif';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+type PhotoSlot = "before" | "after";
 const easeInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
 const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
 
@@ -65,21 +78,41 @@ function rr(
   ctx.closePath();
 }
 
-function coverInto(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  x: number,
-  y: number,
-  w: number,
-  h: number
-) {
-  const imgRatio = img.width / img.height;
-  const boxRatio = w / h;
-  let sw = img.width;
-  let sh = img.height;
-  if (imgRatio > boxRatio) sw = img.height * boxRatio;
-  else sh = img.width / boxRatio;
-  ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, w, h);
+/** Größe der Vorher/Nachher-Karte im Report */
+const CARD_W = V4_W - 100;
+const CARD_H = 1060;
+
+/**
+ * Bild in Kartengröße vorrendern – mit Verschiebung/Zoom und Blur-Rand beim
+ * Rauszoomen. Einmal pro Änderung statt in jedem Video-Frame.
+ */
+function renderCardPanel(img: HTMLImageElement, t: ImageTransform): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = CARD_W;
+  c.height = CARD_H;
+  const ctx = c.getContext("2d");
+  if (!ctx) return c;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  drawPanel(ctx, img, 0, 0, CARD_W, CARD_H, t);
+  return c;
+}
+
+/** Spielraum (Karten-px), in dem sich das Bild bei diesem Zoom verschieben lässt */
+function panelSlack(img: HTMLImageElement, scale: number) {
+  const cover = Math.max(CARD_W / img.width, CARD_H / img.height);
+  const f = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+  return {
+    x: Math.abs(img.width * cover * f - CARD_W) / 2,
+    y: Math.abs(img.height * cover * f - CARD_H) / 2,
+  };
+}
+
+/** Zoom, bei dem das komplette Bild in die Karte passt */
+function fitScale(img: HTMLImageElement) {
+  const cover = Math.max(CARD_W / img.width, CARD_H / img.height);
+  const contain = Math.min(CARD_W / img.width, CARD_H / img.height);
+  return Math.max(MIN_SCALE, +(contain / cover).toFixed(2));
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
@@ -164,11 +197,12 @@ const sp = (text: string) => text.split("").join(" ");
 /**
  * Vorher/Nachher als EIN Bild mit vertikaler Trennlinie (Pillen oben).
  * divFrac = Position der Linie (0..1); bei 0 ist nur das Nachher sichtbar.
+ * before/after sind bereits auf Kartengröße gerendert (renderCardPanel).
  */
 function drawSplitCard(
   ctx: CanvasRenderingContext2D,
-  before: HTMLImageElement,
-  after: HTMLImageElement,
+  before: HTMLCanvasElement,
+  after: HTMLCanvasElement,
   L: ReportLayout,
   divFrac: number
 ) {
@@ -178,12 +212,12 @@ function drawSplitCard(
   ctx.save();
   rr(ctx, x, y, w, h, 40);
   ctx.clip();
-  coverInto(ctx, before, x, y, w, h);
+  ctx.drawImage(before, x, y, w, h);
   ctx.save();
   ctx.beginPath();
   ctx.rect(divX, y, x + w - divX, h);
   ctx.clip();
-  coverInto(ctx, after, x, y, w, h);
+  ctx.drawImage(after, x, y, w, h);
   ctx.restore();
 
   if (divFrac > 0.015) {
@@ -248,8 +282,8 @@ function darkCard(
 export function drawReportPage(
   ctx: CanvasRenderingContext2D,
   d: ReportData,
-  before: HTMLImageElement,
-  after: HTMLImageElement
+  before: HTMLCanvasElement,
+  after: HTMLCanvasElement
 ): ReportPageResult {
   const W = V4_W;
   const M = 60;
@@ -348,8 +382,8 @@ export function drawReportPage(
   const layout: ReportLayout = {
     cardX: 50,
     cardY: 620,
-    cardW: W - 100,
-    cardH: 1060,
+    cardW: CARD_W,
+    cardH: CARD_H,
     scoreX: W - M,
     scoreY: 0,
   };
@@ -462,8 +496,8 @@ function fitTitle(
 export interface FrameAssets {
   page: HTMLCanvasElement;
   contentH: number;
-  before: HTMLImageElement;
-  after: HTMLImageElement;
+  before: HTMLCanvasElement;
+  after: HTMLCanvasElement;
   layout: ReportLayout;
   stops: number[];
 }
@@ -644,8 +678,16 @@ export default function VideoTemplate4({
   const [video, setVideo] = useState<{ url: string; blob: Blob; ext: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [assetsVersion, setAssetsVersion] = useState(0);
+  const [framing, setFraming] = useState<Record<PhotoSlot, ImageTransform>>({
+    before: { ...DEFAULT_TRANSFORM },
+    after: { ...DEFAULT_TRANSFORM },
+  });
+  // Generiertes Nachher ist exakt wie das Vorher gerahmt → standardmäßig gekoppelt
+  const [linked, setLinked] = useState(true);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const editorRef = useRef<HTMLCanvasElement | null>(null);
+  const dragRef = useRef<{ slot: PhotoSlot; lastX: number; lastY: number } | null>(null);
   const exportingRef = useRef(false);
   const assetsRef = useRef<FrameAssets | null>(null);
   const frameDataRef = useRef({ brandName, match });
@@ -670,9 +712,33 @@ export default function VideoTemplate4({
 
   const ready = !!before && !!after && !!styleName;
 
+  const beforePanel = useMemo(
+    () => (before ? renderCardPanel(before.img, framing.before) : null),
+    [before, framing.before]
+  );
+  const afterPanel = useMemo(
+    () => (after ? renderCardPanel(after.img, framing.after) : null),
+    [after, framing.after]
+  );
+
+  // Rahmen-Editor: statische Karte mit Trennlinie in der Mitte
+  useEffect(() => {
+    const canvas = editorRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx || !beforePanel || !afterPanel) return;
+    ctx.clearRect(0, 0, CARD_W, CARD_H);
+    drawSplitCard(
+      ctx,
+      beforePanel,
+      afterPanel,
+      { cardX: 0, cardY: 0, cardW: CARD_W, cardH: CARD_H, scoreX: 0, scoreY: 0 },
+      0.5
+    );
+  }, [beforePanel, afterPanel]);
+
   // Report-Seite (Offscreen) neu bauen, wenn sich Inhalte ändern
   useEffect(() => {
-    if (!before || !after || !styleName) {
+    if (!beforePanel || !afterPanel || !styleName) {
       assetsRef.current = null;
       return;
     }
@@ -700,14 +766,14 @@ export default function VideoTemplate4({
           brandName,
           showBranding,
         },
-        before.img,
-        after.img
+        beforePanel,
+        afterPanel
       );
       assetsRef.current = {
         page,
         contentH: result.contentH,
-        before: before.img,
-        after: after.img,
+        before: beforePanel,
+        after: afterPanel,
         layout: result.layout,
         stops: result.stops,
       };
@@ -717,8 +783,8 @@ export default function VideoTemplate4({
       cancelled = true;
     };
   }, [
-    before,
-    after,
+    beforePanel,
+    afterPanel,
     styleName,
     title,
     subtitle,
@@ -770,6 +836,73 @@ export default function VideoTemplate4({
     });
     const img = await loadImage(src);
     setter({ src, img });
+    // Neues Bild → Ausschnitt zurücksetzen (gekoppelt: beide)
+    setFraming((f) =>
+      linked
+        ? { before: { ...DEFAULT_TRANSFORM }, after: { ...DEFAULT_TRANSFORM } }
+        : { ...f, [which]: { ...DEFAULT_TRANSFORM } }
+    );
+  };
+
+  /** Ausschnitt ändern – gekoppelt für Vorher und Nachher zugleich */
+  const updateFraming = (slot: PhotoSlot, fn: (t: ImageTransform) => ImageTransform) =>
+    setFraming((f) => {
+      const next = fn(f[slot]);
+      return linked ? { before: next, after: { ...next } } : { ...f, [slot]: next };
+    });
+
+  const setZoom = (slot: PhotoSlot, scale: number) =>
+    updateFraming(slot, (t) => ({ ...t, scale: clamp(+scale.toFixed(2), MIN_SCALE, MAX_SCALE) }));
+
+  const fitWhole = (slot: PhotoSlot) => {
+    const photo = slot === "before" ? before : after;
+    if (photo) updateFraming(slot, () => ({ ...DEFAULT_TRANSFORM, scale: fitScale(photo.img) }));
+  };
+
+  const toggleLinked = (on: boolean) => {
+    setLinked(on);
+    if (on) setFraming((f) => ({ before: f.before, after: { ...f.before } }));
+  };
+
+  const onFrameDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const slot: PhotoSlot =
+      linked || e.clientX - rect.left < rect.width / 2 ? "before" : "after";
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    dragRef.current = { slot, lastX: e.clientX, lastY: e.clientY };
+  };
+
+  const onFrameMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    const photo = drag && (drag.slot === "before" ? before : after);
+    if (!drag || !photo) return;
+    // Bildschirm-px → Karten-px, damit das Bild genau unter dem Finger bleibt
+    const k = CARD_W / e.currentTarget.getBoundingClientRect().width;
+    const dx = (e.clientX - drag.lastX) * k;
+    const dy = (e.clientY - drag.lastY) * k;
+    drag.lastX = e.clientX;
+    drag.lastY = e.clientY;
+    updateFraming(drag.slot, (t) => {
+      const slack = panelSlack(photo.img, t.scale);
+      return {
+        ...t,
+        offsetX: slack.x ? clamp(t.offsetX - dx / slack.x, -1, 1) : t.offsetX,
+        offsetY: slack.y ? clamp(t.offsetY + dy / slack.y, -1, 1) : t.offsetY,
+      };
+    });
+  };
+
+  const endFrameDrag = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    dragRef.current = null;
   };
 
   // Cmd/Ctrl+V füllt die leeren Slots der Reihe nach: erst Vorher, dann Nachher
@@ -995,6 +1128,107 @@ export default function VideoTemplate4({
             )}
           </div>
         </div>
+
+        {before && after && (
+          <div className="mt-6 border-t border-paper-border pt-6">
+            <h3 className="text-xs font-medium uppercase tracking-widest text-ink-faint">
+              Adjust framing
+            </h3>
+            <p className="mt-2 text-sm text-ink-muted">
+              Drag the image to reposition · zoom out to show the whole photo (the edges
+              get a blurred fill).
+            </p>
+            <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
+              <canvas
+                ref={editorRef}
+                width={CARD_W}
+                height={CARD_H}
+                onPointerDown={onFrameDown}
+                onPointerMove={onFrameMove}
+                onPointerUp={endFrameDrag}
+                onPointerCancel={endFrameDrag}
+                className="mx-auto block w-full max-w-[280px] shrink-0 cursor-grab touch-none active:cursor-grabbing sm:mx-0"
+              />
+              <div className="min-w-0 flex-1 space-y-4">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={linked}
+                    onChange={(e) => toggleLinked(e.target.checked)}
+                    className="h-4 w-4 rounded border-paper-border accent-ink"
+                  />
+                  <span className="text-sm text-ink-muted">Same framing for before & after</span>
+                </label>
+                {(linked
+                  ? ([["before", "Before & after"]] as const)
+                  : ([
+                      ["before", "Before"],
+                      ["after", "After"],
+                    ] as const)
+                ).map(([slot, label]) => (
+                  <div key={slot}>
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                        {label} · zoom
+                      </span>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          className="text-[11px] text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+                          onClick={() => fitWhole(slot)}
+                        >
+                          show whole image
+                        </button>
+                        <button
+                          type="button"
+                          className="text-[11px] text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+                          onClick={() => updateFraming(slot, () => ({ ...DEFAULT_TRANSFORM }))}
+                        >
+                          reset
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        aria-label={`zoom out ${slot}`}
+                        className="zoom-btn"
+                        onClick={() => setZoom(slot, framing[slot].scale - 0.15)}
+                        disabled={framing[slot].scale <= MIN_SCALE}
+                      >
+                        −
+                      </button>
+                      <input
+                        type="range"
+                        min={MIN_SCALE}
+                        max={MAX_SCALE}
+                        step={0.01}
+                        value={framing[slot].scale}
+                        onChange={(e) => setZoom(slot, Number(e.target.value))}
+                        className="range-lg min-w-0 flex-1"
+                      />
+                      <button
+                        type="button"
+                        aria-label={`zoom in ${slot}`}
+                        className="zoom-btn"
+                        onClick={() => setZoom(slot, framing[slot].scale + 0.15)}
+                        disabled={framing[slot].scale >= MAX_SCALE}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {!linked && (
+                  <p className="text-xs text-ink-faint">
+                    Drag on the left half to move the before photo, on the right half for the
+                    after photo.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="panel p-6">

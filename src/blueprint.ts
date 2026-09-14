@@ -162,7 +162,7 @@ function drawBlurredCover(
  * Zeichnet ein Bild in ein Panel: bei Zoom <1 entsteht ein Rand, der mit einer
  * unscharfen (geblurrten) Cover-Version desselben Bildes gefüllt wird.
  */
-function drawPanel(
+export function drawPanel(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   px: number,
