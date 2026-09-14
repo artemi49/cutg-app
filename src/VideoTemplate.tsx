@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureFonts, loadImage } from "./blueprint";
+import { PASTE_SHORTCUT, usePasteImages } from "./paste";
 import { logEvent } from "./session";
 import { recordCanvasVideo, saveVideoBlob } from "./video";
 import type { Gender, HairstyleGroup } from "./types";
@@ -480,6 +481,11 @@ export default function VideoTemplate({
     setPhoto({ src, img });
   };
 
+  // Cmd/Ctrl+V füllt den leeren Foto-Slot
+  usePasteImages((files) => {
+    if (!photo) setFile(files[0]);
+  });
+
   const exportVideo = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !photo || !ready || exporting) return;
@@ -534,8 +540,11 @@ export default function VideoTemplate({
               </button>
             </div>
           ) : (
-            <label className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-paper-border bg-paper-warm px-4 py-8 text-center text-sm font-medium text-ink transition hover:border-ink hover:bg-white">
               + Add image
+              <span className="mt-1 hidden text-xs font-normal text-ink-faint sm:block">
+                or paste with {PASTE_SHORTCUT}
+              </span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
