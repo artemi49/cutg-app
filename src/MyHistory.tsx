@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { HistoryList } from "./history";
-import { rpc, type HistoryEntry, type Profile } from "./session";
+import { HISTORY_IMAGES_KEPT, rpc, type HistoryEntry, type Profile } from "./session";
 
 /**
  * Eigener Verlauf – ausschließlich lesend. Es gibt keine Lösch-Funktion,
- * weder hier noch serverseitig: der Verlauf gehört dem Admin.
+ * weder hier noch serverseitig: der Verlauf gehört dem Admin. Bilder hält der
+ * Server nur für die letzten HISTORY_IMAGES_KEPT Generierungen vor.
  */
 export default function MyHistory({ profile }: { profile: Profile }) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
@@ -25,6 +26,10 @@ export default function MyHistory({ profile }: { profile: Profile }) {
             {profile.used_total} generations in total · {profile.used_this_month} this
             month
             {profile.monthly_limit !== null && ` (limit ${profile.monthly_limit})`}
+          </p>
+          <p className="mt-1 text-xs text-ink-faint">
+            Images are kept for your {HISTORY_IMAGES_KEPT} most recent generations — older
+            entries stay listed without images.
           </p>
         </div>
         <a href="#" className="btn-secondary text-xs">

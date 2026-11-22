@@ -10,6 +10,8 @@ export const SUPABASE_ANON =
 /** Clipper melden sich nur mit Benutzernamen an – die Mail ist ein Interna. */
 export const EMAIL_DOMAIN = "clipper.cutg";
 export const HISTORY_BUCKET = "clipper-history";
+/** So viele Generierungen pro Konto behalten ihre Bilder (Worker: HISTORY_KEEP). */
+export const HISTORY_IMAGES_KEPT = 20;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
@@ -137,6 +139,42 @@ export async function archiveUrl(path: string | null): Promise<string | null> {
     .from(HISTORY_BUCKET)
     .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
+}
+
+/** Archivbild als data-URL – so bleibt der Canvas-Export frei von CORS-Sperren. */
+export async function archiveDataUrl(path: string | null): Promise<string | null> {
+  if (!path) return null;
+  const { data, error } = await supabase.storage.from(HISTORY_BUCKET).download(path);
+  if (error || !data) return null;
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(data);
+  });
+}
+
+export interface JobResult {
+  /** Eingabefoto (data-URL) – fehlt, wenn es schon aufgeräumt wurde */
+  image: string | null;
+  /** Ergebnis (data-URL) */
+  result: string;
+}
+
+/**
+ * Ergebnis eines Queue-Elements. Neue Ergebnisse liegen nur im Archiv-Bucket;
+ * in der DB steht es nur noch, wenn das Archivieren fehlgeschlagen ist.
+ */
+export async function loadResult(jobId: string, idx: number): Promise<JobResult | null> {
+  const r = await rpc<{
+    image: string | null;
+    result: string | null;
+    after_path?: string | null;
+  } | null>("mkt_get_result", { p_job: jobId, p_idx: idx });
+  if (!r) return null;
+  const result = r.result || (await archiveDataUrl(r.after_path ?? null));
+  if (!result) return null;
+  return { image: r.image || null, result };
 }
 
 export interface SessionState {

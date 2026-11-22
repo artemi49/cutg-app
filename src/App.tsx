@@ -41,7 +41,7 @@ import LoginScreen from "./Login";
 import MyHistory from "./MyHistory";
 import VideoTemplate from "./VideoTemplate";
 import VideoTemplate4 from "./VideoTemplate4";
-import { logEvent, rpc, signOut, useSession, type Profile } from "./session";
+import { loadResult, logEvent, rpc, signOut, useSession, type Profile } from "./session";
 
 type Mode = "t1" | "t2" | "t3" | "t4";
 type Slot = "before" | "after";
@@ -311,17 +311,15 @@ function MainApp({ profile, onReload }: { profile: Profile; onReload: () => void
         if (it.status !== "done" || loadedIdx.current.has(it.idx)) continue;
         loadedIdx.current.add(it.idx);
         try {
-          const r = await rpc<{ image: string; result: string } | null>(
-            "mkt_get_result",
-            { p_job: activeJob.id, p_idx: it.idx }
-          );
-          if (!r || !r.result) continue;
+          const r = await loadResult(activeJob.id, it.idx);
+          if (!r) continue;
           if (activeJob.mode === "t2" && it.idx > 0) {
             setT2Result((prev) => ({
               beforeAfter: prev?.beforeAfter ?? null,
               afters: [...(prev?.afters ?? []), { name: it.style, dataUrl: r.result }],
             }));
           } else {
+            if (!r.image) continue; // Eingabefoto schon aufgeräumt
             const before = await loadImage(r.image);
             const after = await loadImage(r.result);
             if (activeJob.mode === "t1") {
