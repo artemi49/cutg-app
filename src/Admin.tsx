@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { HistoryList } from "./history";
 import {
   adminCall,
+  HISTORY_IMAGES_KEPT,
   rpc,
   signOut,
   type ClipperRow,
@@ -521,7 +522,8 @@ function HistoryTab({ clippers }: { clippers: ClipperRow[] }) {
       <div className="flex flex-wrap items-center gap-3">
         <ClipperFilter clippers={clippers} value={user} onChange={setUser} />
         <span className="text-xs text-ink-faint">
-          Complete history — clippers cannot remove anything here.
+          Complete history — clippers cannot remove anything here. Images are kept for
+          the {HISTORY_IMAGES_KEPT} most recent generations per account.
         </span>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}

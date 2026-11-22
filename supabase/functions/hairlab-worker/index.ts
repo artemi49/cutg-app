@@ -1,9 +1,11 @@
 // Background worker: processes ONE queue item per invocation, then reliably
 // chains to the next via EdgeRuntime.waitUntil. A 1-minute cron is the backup.
 //
-// Jedes Vorher-/Nachher-Bild wird zusätzlich in den privaten Bucket
-// `clipper-history` archiviert. Nur der Worker (service_role) schreibt dort —
-// die Clipper kommen an ihr Archiv nicht heran und können es nicht löschen.
+// Vorher-/Nachher-Bilder liegen im privaten Bucket `clipper-history`. Nur der
+// Worker (service_role) schreibt dort — die Clipper können nichts löschen.
+// Das Ergebnis steht nur dann zusätzlich in der DB, wenn das Archivieren
+// fehlschlägt. Bei leerer Queue räumt der Worker auf: Bilder bleiben nur für
+// die letzten HISTORY_KEEP Generierungen pro Konto (siehe mkt_srv_prune).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -15,6 +17,9 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const MODEL = Deno.env.get("OPENAI_IMAGE_MODEL") || "gpt-image-2";
 const SELF_URL = `${SUPABASE_URL}/functions/v1/hairlab-worker`;
 const BUCKET = "clipper-history";
+const KEEP = Math.max(1, Number(Deno.env.get("HISTORY_KEEP")) || 20);
+const PRUNE_BATCH = 100;
+const PRUNE_ROUNDS = 5;
 
 async function rpc(fn: string, body: Record<string, unknown>) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
@@ -68,6 +73,38 @@ async function archive(path: string, dataUrl: string): Promise<string | null> {
   }
 }
 
+/**
+ * Leert Bilddaten außerhalb des Verlaufsfensters und löscht Archivdateien,
+ * auf die nichts mehr zeigt. Was beim Löschen schiefgeht, liefert
+ * mkt_srv_prune beim nächsten Lauf einfach wieder.
+ */
+async function prune(): Promise<number> {
+  let removed = 0;
+  for (let round = 0; round < PRUNE_ROUNDS; round++) {
+    const paths = (await rpc("mkt_srv_prune", {
+      p_keep: KEEP,
+      p_limit: PRUNE_BATCH,
+    })) as string[] | null;
+    if (!paths?.length) break;
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}`, {
+      method: "DELETE",
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prefixes: paths }),
+    });
+    if (!res.ok) {
+      console.error("prune delete failed:", res.status, (await res.text()).slice(0, 200));
+      break;
+    }
+    removed += paths.length;
+    if (paths.length < PRUNE_BATCH) break;
+  }
+  return removed;
+}
+
 const extOf = (mime: string) =>
   mime.includes("webp") ? "webp" : mime.includes("png") ? "png" : "jpg";
 
@@ -111,7 +148,11 @@ Deno.serve(async () => {
     const rows = await rpc("mkt_claim_item", {});
     const item = Array.isArray(rows) ? rows[0] : rows;
     if (!item) {
-      return new Response(JSON.stringify({ processed: 0, queueEmpty: true }), {
+      const pruned = await prune().catch((e) => {
+        console.error("prune error:", String((e as Error)?.message || e));
+        return 0;
+      });
+      return new Response(JSON.stringify({ processed: 0, queueEmpty: true, pruned }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -131,7 +172,8 @@ Deno.serve(async () => {
       const afterPath = await archive(`${folder}/${item.idx}-after.png`, result);
       await rpc("mkt_finish_item", {
         p_item: item.item_id,
-        p_result: result,
+        // Nur wenn das Archiv nicht geklappt hat, landet das Bild in der DB
+        p_result: afterPath ? null : result,
         p_error: null,
         p_after_path: afterPath,
       });

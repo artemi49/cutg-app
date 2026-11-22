@@ -40,13 +40,22 @@ npm run dev
 | Was | Wo |
 | --- | --- |
 | Generierungen pro Clipper (gesamt / Monat / 7 Tage / Fehler) | `#admin` → Clipper & Verbrauch |
-| Vollständiger Verlauf mit Vorher-/Nachher-Bild | `#admin` → Verlauf |
+| Vollständiger Verlauf (Bilder für die letzten 20 pro Account) | `#admin` → Verlauf |
 | Downloads und Anmeldungen | `#admin` → Aktivität |
 | Eigener Verlauf des Clippers (nur lesend) | `#verlauf` |
 
 Der Verlauf ist für Clipper **nicht löschbar**: es gibt serverseitig keine
 Lösch-Funktion für sie, und die Archivbilder liegen im privaten Bucket
 `clipper-history`, in den nur der Worker (service_role) schreibt.
+
+**Bilder nur für die letzten 20.** Damit das HairLab-Projekt klein bleibt,
+behalten nur die letzten 20 Generierungen pro Account ihre Bilder (plus alles
+aus den letzten 24 Stunden; Aufträge immer vollständig). Ältere Einträge bleiben
+als Textzeile im Verlauf — Zähler und Monatslimits stimmen weiter. Ergebnisse
+liegen nur im Bucket, nicht als Text in der Datenbank. Aufgeräumt wird
+automatisch vom Worker bei leerer Queue (`mkt_srv_prune`, Minuten-Cron).
+Die Zahl lässt sich über das Secret `HISTORY_KEEP` ändern (Anzeige im Frontend:
+`HISTORY_IMAGES_KEPT` in `src/session.ts`).
 
 Optional lässt sich pro Clipper ein **Monatslimit** setzen. Ist es erreicht,
 lehnt der Server weitere Aufträge ab — nicht erst das Frontend.
@@ -57,7 +66,10 @@ lehnt der Server weitere Aufträge ab — nicht erst das Frontend.
 - `marketing.gen_jobs` / `gen_items` — Aufträge, an `auth.users` gebunden
 - `marketing.usage_events` — Downloads und Anmeldungen
 - Storage-Bucket `clipper-history` — Vorher-/Nachher-Archiv, privat
-- Edge Function `hairlab-worker` — arbeitet die Queue ab und archiviert Bilder
+- Edge Function `hairlab-worker` — arbeitet die Queue ab, archiviert Bilder
+  und räumt alte Bilder auf
+- Migrationen in `supabase/migrations/` (ab `20261122_verlauf_klein.sql`;
+  das Schema davor wurde direkt im Dashboard angelegt)
 - Edge Function `clipper-admin` — legt Accounts an, setzt Passwörter zurück
 
 Alle `mkt_*`-RPCs sind für `anon` gesperrt und brauchen ein gültiges Login.

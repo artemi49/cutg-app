@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ensureFonts, loadImage } from "./blueprint";
 import { SUBJECT } from "./constants";
-import { logEvent, rpc } from "./session";
+import { loadResult, logEvent, rpc } from "./session";
 import { recordCanvasVideo, saveVideoBlob } from "./video";
 import type { Gender, HairStyle, HairstyleGroup } from "./types";
 
@@ -823,11 +823,8 @@ export default function VideoTemplate4({
         } | null>("mkt_get_job", { p_job: jobId }).catch(() => null);
         const item = st?.items?.[0];
         if (item?.status === "done") {
-          const r = await rpc<{ result: string | null } | null>("mkt_get_result", {
-            p_job: jobId,
-            p_idx: 0,
-          });
-          if (!r?.result) throw new Error("No image data received");
+          const r = await loadResult(jobId, 0);
+          if (!r) throw new Error("No image data received");
           const genImg = await loadImage(r.result);
           setAfter({ src: r.result, img: genImg });
           return;
